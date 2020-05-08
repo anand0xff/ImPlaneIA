@@ -24,10 +24,9 @@ from astropy.time import Time
 from astroquery.simbad import Simbad
 # from scipy.stats import mstats, sem
 from matplotlib import pyplot as plt
+from munch import munchify as dict2class
 from scipy.special import comb
 from termcolor import cprint
-
-# import sys
 
 
 class ObservablesFromText():
@@ -165,7 +164,7 @@ class ObservablesFromText():
                 print('triple:', triple, tname[-1])
             uvlist.append((self.ctrs[triple[0]] - self.ctrs[triple[1]],
                            self.ctrs[triple[1]] - self.ctrs[triple[2]]))
-        #print(len(uvlist), "uvlist", uvlist)
+        # print(len(uvlist), "uvlist", uvlist)
         if self.verbose:
             print(tarray.shape, np.array(uvlist).shape)
         return tarray, np.array(uvlist)
@@ -183,7 +182,7 @@ class ObservablesFromText():
                 if i < j:
                     blist.append((i, j))
         barray = np.array(blist).astype(np.int)
-        #blname = []
+        # blname = []
         bllist = []
         for basepair in blist:
             # blname.append("{0:d}_{1:d}".format(basepair[0],basepair[1]))
@@ -211,7 +210,7 @@ class ObservablesFromText():
               self.cp*self.degree, "\n")
         if len(self.observables) == 4:
             print(self.ca.shape, "ca:\n", self.ca, "\n")
-        #print("implane2oifits._showdata: self.info4oif_dict['objname']", self.info4oif_dict)
+        # print("implane2oifits._showdata: self.info4oif_dict['objname']", self.info4oif_dict)
 
         print("hole centers array shape:", self.ctrs.shape)
 
@@ -264,24 +263,24 @@ class ObservablesFromText():
 
 
 def Format_STAINDEX_V2(tab):
-    STA_INDEX = []
+    sta_index = []
     for x in tab:
         ap1 = int(x[0])
         ap2 = int(x[1])
         line = np.array([ap1, ap2]) + 1
-        STA_INDEX.append(line)
-    return STA_INDEX
+        sta_index.append(line)
+    return sta_index
 
 
 def Format_STAINDEX_T3(tab):
-    STA_INDEX = []
+    sta_index = []
     for x in tab:
         ap1 = int(x[0])
         ap2 = int(x[1])
         ap3 = int(x[2])
         line = np.array([ap1, ap2, ap3]) + 1
-        STA_INDEX.append(line)
-    return STA_INDEX
+        sta_index.append(line)
+    return sta_index
 
 
 def NRMtoOifits2(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
@@ -402,7 +401,7 @@ def NRMtoOifits2(dic, filename=None, oifprefix=None, datadir=None, verbose=False
             pmra = query['PMRA']
             pmdec = query['PMDEC']
             plx = query['PLX_VALUE']
-    except:
+    except Exception:
         ra = [0]
         dec = [0]
         spectyp = ['fake']
@@ -616,21 +615,21 @@ def NRMtoOifits2(dic, filename=None, oifprefix=None, datadir=None, verbose=False
     return None
 
 
-class A(object):
-    pass
+# class A(object):
+#     pass
 
 
-# Class/function to transform dictionnary into class like (keys accesible as dic.keys and not dic['keys'])
-class Dict2Class:
-    def __init__(self, dictionary):
-        for k, v in dictionary.items():
-            if type(v) == dict:
-                a = A()
-                for key in v.keys():
-                    a.__dict__[key] = v[key]
-                setattr(self, k, a)
-            else:
-                setattr(self, k, v)
+# # Class/function to transform dictionnary into class like (keys accesible as dic.keys and not dic['keys'])
+# class Dict2Class:
+#     def __init__(self, dictionary):
+#         for k, v in dictionary.items():
+#             if type(v) == dict:
+#                 a = A()
+#                 for key in v.keys():
+#                     a.__dict__[key] = v[key]
+#                 setattr(self, k, a)
+#             else:
+#                 setattr(self, k, v)
 
 
 def Saved_filters(ins, filt, upload=False):
@@ -758,7 +757,7 @@ def Calib_NRM(nrm_t, nrm_c, method='med'):
               'e_cpamp': e_cpamp
               }
 
-    return Dict2Class(output)
+    return dict2class(output)
 
 
 def mainsmall(nh=None):
@@ -848,8 +847,8 @@ def implane2oifits2(OV, objecttextdir_c, objecttextdir_t, oifprefix, datadir):
     U1COORD = tuv[:, 0, 1]
     V2COORD = tuv[:, 1, 0]
     U2COORD = tuv[:, 1, 1]
-    U3COORD = -(U1COORD+U2COORD)
-    V3COORD = -(V1COORD+V2COORD)
+    # U3COORD = -(U1COORD+U2COORD)
+    # V3COORD = -(V1COORD+V2COORD)
 
     flagT3 = [False] * nrm_t.ncp
 
@@ -863,7 +862,7 @@ def implane2oifits2(OV, objecttextdir_c, objecttextdir_t, oifprefix, datadir):
                        'VIS2ERR': nrm.e_vis2,
                        'UCOORD': UCOORD,
                        'VCOORD': VCOORD,
-                       'STA_INDEX':  nrm_t.bholes,
+                       'STA_INDEX': nrm_t.bholes,
                        'MJD': t.mjd,
                        'INT_TIME': info['itime'],
                        'TIME': 0,
