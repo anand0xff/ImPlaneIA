@@ -817,6 +817,66 @@ def oitxt2oif(nh=None, oitxtdir=None, oifprefix='', datadir=None, verbose=False)
     print('in directory {0:s}'.format(datadir))
     return dct
 
+def calib_dicts(dct_t, dct_c):
+    """
+    Takes two dicts from OIFITS files, such as those read with oifits.load()
+    Calibrates closure phases and fringe amplitudes of target by calibrator
+    by subtracting closure phases of calibrator from those of target,
+    and dividing fringe amps of target by fringe amps of calibrator
+    Input:
+        dct_t (dict): oifits-compatible dictionary of target observables/info
+        dct_c (dict): oifits-compatible dictionary of calibrator observables/info
+    Returns:
+        calib_dict (dict): oifits-compatible dictionary of calibrated observables/info
+    """
+    #print(dct_t['info'])
+    
+    cp_t = dct_t['OI_T3']['T3PHI']
+    cp_c = dct_c['OI_T3']['T3PHI']
+    fa_t = dct_t['OI_VIS2']['VIS2DATA']
+    fa_c = dct_t['OI_VIS2']['VIS2DATA']
+    cp_out = cp_t - cp_c
+    fa_out = fa_t / fa_c
+    # add their errors in quadrature
+    cperr_t = dct_t['OI_T3']['T3PHIERR']
+    cperr_c = dct_c['OI_T3']['T3PHIERR']
+    faerr_c = dct_t['OI_VIS2']['VIS2ERR']
+    faerr_t = dct_c['OI_VIS2']['VIS2ERR']
+    cperr_out = np.sqrt(cperr_t**2. + cperr_c**2.)
+    faerr_out = np.sqrt(faerr_t**2. + faerr_c**2.)
+    # copy the target dict and modify a few things
+    calib_dict = dct_t.copy()
+    calib_dict['OI_T3']['T3PHI'] = cp_out
+    calib_dict['OI_VIS2']['VIS2DATA'] = fa_out
+    calib_dict['OI_T3']['T3PHIERR'] = cperr_out
+    calib_dict['OI_VIS2']['VIS2EE'] = faerr_out
+    return calib_dict
+
+
+
+def calibrate_oifits(oif_t, oif_c, oifprefix='',datadir=None):
+    """
+    Take an OIFITS file of the target and an OIFITS file of the calibrator and
+    produce a single normalized OIFITS file.
+    Input:
+        oif_t (str): file name of the target OIFITS file
+        oif_c (str): file name of the calibrator OIFITS file
+        oifprefix (str): Prefix added to the output oifits filename
+        datadir (str): Directory to write the oifits file in
+    Returns:
+        calibrated (dict): an nrm dict containing all OIFITS information
+    """
+    # load in the nrm observables dict from each oifits
+    targ = oifits.load(oif_t)
+    calb = oifits.load(oif_c)
+    # calibrate the target by the calibrator
+    # this produces a single calibrated nrm dict
+    calibrated = calib_dicts(targ, calb)
+
+    print('CALIB FLAGS shape', len(calibrated['OI_VIS']['FLAG']))
+    oifits.save(calibrated, oifprefix=oifprefix, datadir=datadir)
+    return calibrated
+
 
 if __name__ == "__main__":
 

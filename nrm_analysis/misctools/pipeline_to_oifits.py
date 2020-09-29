@@ -267,4 +267,4 @@ if __name__ == "__main__":
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     # Do the converting to OIFITS
-    table2oif(nh=numholes, oifinfo=oifitsdict, fitsname=fn_fullpath, oifprefix=pref, datadir=outdir)
+    full_dct = table2oif(nh=numholes, oifinfo=oifitsdict, fitsname=fn_fullpath, oifprefix=pref, datadir=outdir)

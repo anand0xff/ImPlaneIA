@@ -109,7 +109,6 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     `oifprefix` {str / None}:
         Mnemonic prefix added to filename (eg ov_7).
     """
-
     if dic is None:
         cprint('\nError save oifits : Wrong data format!', on_color='on_red')
         return None
@@ -233,8 +232,11 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
 
     if verbose:
         print('-> Including OI Array table...')
+    try:
+        staxy = dic['info']['STAXY'] # these are the mask hole xy-coords
+    except KeyError:
+        staxy = dic['OI_ARRAY']['STAXY']
 
-    staxy = dic['info']['STAXY']
     N_ap = len(staxy)
 
     tel_name = ['A%i' % x for x in np.arange(N_ap)+1]
@@ -248,6 +250,7 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
         staxyz.append(line)
 
     sta_index = np.arange(N_ap) + 1
+    print('sta_index', sta_index)
 
     pscale = dic['info']['PSCALE']/1000.  # arcsec
     isz = dic['info']['ISZ']  # Size of the image to extract NRM data
@@ -273,6 +276,8 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     hdu.header['ARRAYZ'] = float(0)
     hdu.header['ARRNAME'] = dic['info']['MASK']
     hdu.header['FRAME'] = 'SKY'
+    hdu.header['PSCALE'] = pscale * 1000.  # [mas] RAC 9/2020
+    hdu.header['ISZ'] = isz  # RAC 9/2020
     hdu.header['OI_REVN'] = 2, 'Revision number of the table definition'
 
     hdulist.append(hdu)
@@ -286,6 +291,9 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
 
     data = dic['OI_VIS']
     npts = len(dic['OI_VIS']['VISAMP'])
+
+    print('NPTS:', npts)
+    print('FLAGS:', data['FLAG'], len(data['FLAG']))
 
     sta_index = Format_STAINDEX_V2(data['STA_INDEX'])
 
@@ -406,7 +414,7 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
 
 
 def load(filename, target=None, ins=None, mask=None, include_vis=True):
-    """ Load oifits file and create the dictionnary format to be readed and plotted.
+    """ Load oifits file and create the dictionary format to be read and plotted.
 
     Parameters
     ----------
@@ -425,7 +433,63 @@ def load(filename, target=None, ins=None, mask=None, include_vis=True):
     hdr = fitsHandler[0].header
 
     dic = {}
+    dic['info'] = {}
+    try:
+        dic['info']['TARGET'] = hdr['OBJECT']
+    except KeyError:
+        dic['info']['TARGET'] = target
+    try:
+        dic['info']['OBJECT'] = hdr['OBJECT']
+    except KeyError:
+        dic['info']['OBJECT'] = None
+    try:
+        dic['info']['INSTRUME'] = hdr['INSTRUME']
+    except KeyError:
+        dic['info']['INSTRUME'] = ins
+    try:
+        dic['info']['MASK'] = hdr['MASK']
+    except KeyError:
+        dic['info']['MASK'] = mask
+    try:
+        dic['info']['FILT'] = hdr['FILT']
+    except KeyError:
+        dic['info']['FILT'] = None
+    try:
+        dic['info']['DATE-OBS'] = hdr['DATE-OBS']
+    except KeyError:
+        dic['info']['DATE-OBS'] = None
+    try:
+        dic['info']['TELESCOP'] = hdr['TELESCOP']
+    except KeyError:
+        dic['info']['TELESCOP'] = None  # try to get it from somewhere else?
+    try:
+        dic['info']['OBSERVER'] = hdr['OBSERVER']
+    except KeyError:
+        dic['info']['OBSERVER'] = None
+    try:
+        dic['info']['INSMODE'] = hdr['INSMODE']
+    except KeyError:
+        dic['info']['INSMODE'] = None
+
     for hdu in fitsHandler[1:]:
+        # RAC 9/2020
+        # try to read in info from the OI_ARRAY required for re-saving
+        if hdu.header['EXTNAME'] == 'OI_ARRAY':
+            try:
+                dic['info']['PSCALE'] = hdu.header['PSCALE']
+            except KeyError:
+                continue
+            try:
+                dic['info']['ISZ'] = hdu.header['ISZ']
+            except KeyError:
+                continue
+            # make staxy from staxyz array (remove last column)
+            staxyz = hdu.data['STAXYZ']
+            staxy = np.delete(staxyz, -1, 1)
+            dic['OI_ARRAY'] = {'STAXYZ': staxyz,
+                               'STAXY': staxy
+                               }
+
         if hdu.header['EXTNAME'] == 'OI_WAVELENGTH':
             dic['OI_WAVELENGTH'] = {'EFF_WAVE': hdu.data['EFF_WAVE'],
                                     'EFF_BAND': hdu.data['EFF_BAND'],
@@ -443,13 +507,14 @@ def load(filename, target=None, ins=None, mask=None, include_vis=True):
                               'TARGET_ID': hdu.data['TARGET_ID'],
                               'FLAG': np.array(hdu.data['FLAG']),
                               }
+            # these are in every extension, but take them from here
+            dic['info']['MJD'] = hdu.data['MJD'][0]
+            dic['info']['ARRNAME'] = hdu.header['ARRNAME']
             try:
                 dic['OI_VIS2']['BL'] = hdu.data['BL']
             except KeyError:
                 dic['OI_VIS2']['BL'] = (
                     hdu.data['UCOORD']**2 + hdu.data['VCOORD']**2)**0.5
-
-            mjd = hdu.data['MJD'][0]
 
         if hdu.header['EXTNAME'] == 'OI_VIS':
             dic['OI_VIS'] = {'TARGET_ID': hdu.data['TARGET_ID'],
@@ -506,28 +571,6 @@ def load(filename, target=None, ins=None, mask=None, include_vis=True):
             except KeyError:
                 dic['OI_T3']['BL'] = bl_cp
 
-    dic['info'] = {'MJD': mjd,
-                   }
-    try:
-        dic['info']['TARGET'] = hdr['OBJECT']
-    except KeyError:
-        dic['info']['TARGET'] = target
-    try:
-        dic['info']['OBJECT'] = hdr['OBJECT']
-    except KeyError:
-        dic['info']['OBJECT'] = None
-    try:
-        dic['info']['INSTRUME'] = hdr['INSTRUME']
-    except KeyError:
-        dic['info']['INSTRUME'] = ins
-    try:
-        dic['info']['MASK'] = hdr['MASK']
-    except KeyError:
-        dic['info']['MASK'] = mask
-    try:
-        dic['info']['FILT'] = hdr['FILT']
-    except KeyError:
-        dic['info']['FILT'] = None
     return dic
 
 
