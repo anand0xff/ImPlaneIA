@@ -121,9 +121,9 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     if not os.path.exists(datadir):
         print('### Create %s directory to save all requested Oifits ###' % datadir)
         os.system('mkdir %s' % datadir)
-
+    print(dic['info']['MJD'])
     if type(filename) != str:
-        filename = '%s_%s_%s_%s_%2.0f.oifits' % (dic['info']['TARGET'].replace(' ', ''),
+        filename = '%s_%s_%s_%s_%s.0f.oifits' % (dic['info']['TARGET'].replace(' ', ''),
                                                  dic['info']['INSTRUME'],
                                                  dic['info']['MASK'],
                                                  dic['info']['FILT'],
@@ -296,15 +296,14 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     print('FLAGS:', data['FLAG'], len(data['FLAG']))
 
     sta_index = Format_STAINDEX_V2(data['STA_INDEX'])
-
     hdu = fits.BinTableHDU.from_columns(fits.ColDefs([
-        fits.Column(name='TARGET_ID', format='1I',
+        fits.Column(name='TARGET_ID', format='{}I'.format(str(npts)), # RAC changed format strings
                     array=[data['TARGET_ID']]*npts),
-        fits.Column(name='TIME', format='1D', unit='SECONDS',
+        fits.Column(name='TIME', format='{}D'.format(str(npts)), unit='SECONDS',
                     array=[data['TIME']]*npts),
-        fits.Column(name='MJD', unit='DAY', format='1D',
+        fits.Column(name='MJD', unit='DAY', format='{}D'.format(str(npts)),
                     array=[data['MJD']]*npts),
-        fits.Column(name='INT_TIME', format='1D', unit='SECONDS',
+        fits.Column(name='INT_TIME', format='{}D'.format(str(npts)), unit='SECONDS',
                     array=[data['INT_TIME']]*npts),
         fits.Column(name='VISAMP', format='1D', array=data['VISAMP']),
         fits.Column(name='VISAMPERR', format='1D', array=data['VISAMPERR']),
@@ -319,6 +318,7 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
         fits.Column(name='STA_INDEX', format='2I', array=sta_index),
         fits.Column(name='FLAG', format='1L', array=data['FLAG'])
     ]))
+
 
     hdu.header['OI_REVN'] = 2, 'Revision number of the table definition'
     hdu.header['EXTNAME'] = 'OI_VIS'
@@ -337,13 +337,13 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     npts = len(dic['OI_VIS2']['VIS2DATA'])
 
     hdu = fits.BinTableHDU.from_columns(fits.ColDefs([
-        fits.Column(name='TARGET_ID', format='1I',
+        fits.Column(name='TARGET_ID', format='{}I'.format(str(npts)), # RAC changed format strings
                     array=[data['TARGET_ID']]*npts),
-        fits.Column(name='TIME', format='1D', unit='SECONDS',
+        fits.Column(name='TIME', format='{}D'.format(str(npts)), unit='SECONDS',
                     array=[data['TIME']]*npts),
-        fits.Column(name='MJD', unit='DAY', format='1D',
+        fits.Column(name='MJD', unit='DAY', format='{}D'.format(str(npts)),
                     array=[data['MJD']]*npts),
-        fits.Column(name='INT_TIME', format='1D', unit='SECONDS',
+        fits.Column(name='INT_TIME', format='{}D'.format(str(npts)), unit='SECONDS',
                     array=[data['INT_TIME']]*npts),
         fits.Column(name='VIS2DATA', format='1D', array=data['VIS2DATA']),
         fits.Column(name='VIS2ERR', format='1D', array=data['VIS2ERR']),
@@ -374,11 +374,11 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     sta_index = Format_STAINDEX_T3(data['STA_INDEX'])
 
     hdu = fits.BinTableHDU.from_columns(fits.ColDefs((
-        fits.Column(name='TARGET_ID', format='1I', array=[1]*npts),
-        fits.Column(name='TIME', format='1D', unit='SECONDS', array=[0]*npts),
-        fits.Column(name='MJD', format='1D', unit='DAY',
+        fits.Column(name='TARGET_ID', format='{}I'.format(str(npts)), array=[1]*npts), # RAC changed format strings
+        fits.Column(name='TIME', format='{}D'.format(str(npts)), unit='SECONDS', array=[0]*npts),
+        fits.Column(name='MJD', format='{}D'.format(str(npts)), unit='DAY',
                     array=[data['MJD']]*npts),
-        fits.Column(name='INT_TIME', format='1D', unit='SECONDS',
+        fits.Column(name='INT_TIME', format='{}D'.format(str(npts)), unit='SECONDS',
                     array=[data['INT_TIME']]*npts),
         fits.Column(name='T3AMP', format='1D', array=data['T3AMP']),
         fits.Column(name='T3AMPERR', format='1D', array=data['T3AMPERR']),

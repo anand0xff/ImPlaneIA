@@ -873,7 +873,7 @@ def calibrate_oifits(oif_t, oif_c, oifprefix='',datadir=None):
     # this produces a single calibrated nrm dict
     calibrated = calib_dicts(targ, calb)
 
-    print('CALIB FLAGS shape', len(calibrated['OI_VIS']['FLAG']))
+    #print('CALIB FLAGS shape', len(calibrated['OI_VIS']['FLAG']))
     oifits.save(calibrated, oifprefix=oifprefix, datadir=datadir)
     return calibrated
 
