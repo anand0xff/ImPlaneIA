@@ -225,46 +225,65 @@ def table2oif(nh=None, oifinfo=None, fitsname=None, oifprefix='', datadir=None, 
     print('in directory %s' % datadir)
     return dct
 
+def pipeline2oifits(main_fn, datadir, uncal_fn=None):
+    """
+    This function saves a single oifits file made from a JWST pipeline ami3
+    product. It requires information stored in the _uncal.fits pipeline
+    product, in addition to the main file. The uncal file is assumed to be
+    in the same directory as the main file.
 
+    Input:
+        main_fn (str): filename of the pipeline ami3 output file
+        datadir (str): directory where file and uncal file are kept
+        uncal_fn (str): name of uncal file (level 1b product) used
+                        to produce the ami3 product
+    Returns:
+        fulldict (dict): dictionary of all info required to save an oifits file
 
+    """
+    fn_fullpath = os.path.join(datadir, main_fn)
+    if uncal_fn is None:
+        # try to find a matching )uncal file
+        if 'psf' in main_fn:
+            uncal_globname = os.path.join(datadir,(main_fn.split('_psf-amiavg')[0] + '*_uncal.fits').replace('001001', '002001'))
+        else:
+            uncal_globname = os.path.join(datadir,main_fn.split('_amiavg')[0]+'*_uncal.fits')
+        print('looking for files that match the pattern:',uncal_globname)
+        # take the first mirage file that matches the pattern
+        uncal_list = sorted(glob.glob(uncal_globname))
+        if len(uncal_list) < 1:
+            raise Exception("No suitable '_uncal' file found; input filename with 'uncal_fn=' in function call.")
+        uncal_fn = uncal_list[0]
 
-if __name__ == "__main__":
-    indir = 'ami_sims/'
-    main_fn = 'jw01093001001_01101_amiavg.fits' # AB-Dor simulation (target)
-    #main_fn = 'jw01093001001_01101_psf-amiavg.fits' # HD-37093 simulation (calibrator)
-    fn_fullpath = os.path.join(indir,main_fn)
-
-    miragedir = indir
-    if 'psf' in main_fn:
-        mirage_globname = os.path.join(miragedir,(main_fn.split('_psf-amiavg')[0] + '*_uncal.fits').replace('001001', '002001'))
-    else:
-        mirage_globname = os.path.join(miragedir,main_fn.split('_amiavg')[0]+'*_uncal.fits')
-    print('looking for files that match the pattern:',mirage_globname)
-    # take the first mirage file that matches the pattern
-    mirage_list = glob.glob(mirage_globname)
-    if len(mirage_list) < 1:
-        raise Exception("No suitable '_uncal' file found; may need to manually input filename.")
-    # if the above didn't work, input filename here
-    mirage_fn = mirage_list[0]
-
-    #get header info to use from MIRAGE/MAST file
-    pri_hdr = fits.getheader(mirage_fn,0)
-    sci_hdr = fits.getheader(mirage_fn,1)
+    # get header info to use from MIRAGE/MAST file
+    pri_hdr = fits.getheader(uncal_fn,0)
+    sci_hdr = fits.getheader(uncal_fn,1)
     filt = pri_hdr['FILTER']
     # Initialize the instrument data object for NIRISS
     instdata = InstrumentData.NIRISS(filt)
     # Use header to make info4oif_dict
     instdata.updatewithheaderinfo(pri_hdr,sci_hdr)
     oifitsdict = instdata.info4oif_dict
+    print(oifitsdict['ctrs'])
     # since mirage file is not 2 or 3 dimensional, missed 'itime' keyword in dict.
     # skirting around that issue inelegantly for now...
     # take EFFEXPTM keyword from main file
     main_hdr = fits.getheader(fn_fullpath)
-    oifitsdict['itime'] = main_hdr['EFFEXPTM'] # is the right number to use here?
+    oifitsdict['itime'] = main_hdr['EFFEXPTM'] # is this the right number to use here?
     numholes = 7
     pref = str(main_hdr['TARGPROP']+'_') # prefix to use with oifits filename
     outdir = 'oifits_out/'
     if not os.path.exists(outdir):
         os.mkdir(outdir)
     # Do the converting to OIFITS
-    full_dct = table2oif(nh=numholes, oifinfo=oifitsdict, fitsname=fn_fullpath, oifprefix=pref, datadir=outdir)
+    fulldict = table2oif(nh=numholes, oifinfo=oifitsdict, fitsname=fn_fullpath, oifprefix=pref, datadir=outdir)
+    return fulldict
+
+if __name__ == "__main__":
+    indir = '/user/rcooper/Projects/NIRISS/AMI/build75testing/ami_sims/'
+    targ_fn = 'jw01093001001_01101_amiavg.fits'  # AB-Dor simulation (target)
+    calib_fn = 'jw01093001001_01101_psf-amiavg.fits'  # HD-37093 simulation (calibrator)
+    pipeline2oifits(targ_fn, indir)
+    pipeline2oifits(calib_fn, indir)
+
+

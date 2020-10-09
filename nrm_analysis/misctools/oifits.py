@@ -121,13 +121,21 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     if not os.path.exists(datadir):
         print('### Create %s directory to save all requested Oifits ###' % datadir)
         os.system('mkdir %s' % datadir)
-    print(dic['info']['MJD'])
+    
     if type(filename) != str:
-        filename = '%s_%s_%s_%s_%s.0f.oifits' % (dic['info']['TARGET'].replace(' ', ''),
-                                                 dic['info']['INSTRUME'],
-                                                 dic['info']['MASK'],
-                                                 dic['info']['FILT'],
-                                                 dic['info']['MJD'])
+        try:
+            if len(dic['info']['MJD']) > 1:
+                filename = '%s_%s_%s_%s_%s.0f.oifits' % (dic['info']['TARGET'].replace(' ', ''),
+                                                             dic['info']['INSTRUME'],
+                                                             dic['info']['MASK'],
+                                                             dic['info']['FILT'],
+                                                             dic['info']['MJD'][0]) # if loaded from oifits it is a list
+        except TypeError:
+            filename = '%s_%s_%s_%s_%s.0f.oifits' % (dic['info']['TARGET'].replace(' ', ''),
+                                                     dic['info']['INSTRUME'],
+                                                     dic['info']['MASK'],
+                                                     dic['info']['FILT'],
+                                                     dic['info']['MJD'])
         filename = oifprefix + filename
 
     # ------------------------------
@@ -161,12 +169,14 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
         print('-> Including OI Wavelength table...')
     data = dic['OI_WAVELENGTH']
 
-    hdu = fits.BinTableHDU.from_columns(fits.ColDefs((
-        fits.Column(name='EFF_WAVE', format='1E',
-                    unit='METERS', array=[data['EFF_WAVE']]),
-        fits.Column(name='EFF_BAND', format='1E',
+
+    col1 = fits.Column(name='EFF_WAVE', format='1E',
+                    unit='METERS', array=[data['EFF_WAVE']])
+    col2 = fits.Column(name='EFF_BAND', format='1E',
                     unit='METERS', array=[data['EFF_BAND']])
-    )))
+
+    coldefs = fits.ColDefs([col1,col2])
+    hdu = fits.BinTableHDU.from_columns(coldefs)
 
     # Header
     hdu.header['EXTNAME'] = 'OI_WAVELENGTH'
@@ -202,25 +212,28 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
             ra, dec, spectyp = [0], [0], ['unknown']
             pmra, pmdec, plx = [0], [0], [0]
 
-    hdu = fits.BinTableHDU.from_columns(fits.ColDefs((
-        fits.Column(name='TARGET_ID', format='1I', array=[1]),
-        fits.Column(name='TARGET', format='16A', array=[name_star]),
-        fits.Column(name='RAEP0', format='1D', unit='DEGREES', array=ra),
-        fits.Column(name='DECEP0', format='1D', unit='DEGREES', array=dec),
-        fits.Column(name='EQUINOX', format='1E', unit='YEARS', array=[2000]),
-        fits.Column(name='RA_ERR', format='1D', unit='DEGREES', array=[0]),
-        fits.Column(name='DEC_ERR', format='1D', unit='DEGREES', array=[0]),
-        fits.Column(name='SYSVEL', format='1D', unit='M/S', array=[0]),
-        fits.Column(name='VELTYP', format='8A', array=['UNKNOWN']),
-        fits.Column(name='VELDEF', format='8A', array=['OPTICAL']),
-        fits.Column(name='PMRA', format='1D', unit='DEG/YR', array=pmra),
-        fits.Column(name='PMDEC', format='1D', unit='DEG/YR', array=pmdec),
-        fits.Column(name='PMRA_ERR', format='1D', unit='DEG/YR', array=[0]),
-        fits.Column(name='PMDEC_ERR', format='1D', unit='DEG/YR', array=[0]),
-        fits.Column(name='PARALLAX', format='1E', unit='DEGREES', array=plx),
-        fits.Column(name='PARA_ERR', format='1E', unit='DEGREES', array=[0]),
-        fits.Column(name='SPECTYP', format='16A', array=spectyp)
-    )))
+
+    col1 = fits.Column(name='TARGET_ID', format='1I', array=[1])
+    col2 = fits.Column(name='TARGET', format='16A', array=[name_star])
+    col3 = fits.Column(name='RAEP0', format='1D', unit='DEGREES', array=ra)
+    col4 = fits.Column(name='DECEP0', format='1D', unit='DEGREES', array=dec)
+    col5 = fits.Column(name='EQUINOX', format='1E', unit='YEARS', array=[2000])
+    col6 = fits.Column(name='RA_ERR', format='1D', unit='DEGREES', array=[0])
+    col7 = fits.Column(name='DEC_ERR', format='1D', unit='DEGREES', array=[0])
+    col8 = fits.Column(name='SYSVEL', format='1D', unit='M/S', array=[0])
+    col9 = fits.Column(name='VELTYP', format='8A', array=['UNKNOWN'])
+    col10 = fits.Column(name='VELDEF', format='8A', array=['OPTICAL'])
+    col11 = fits.Column(name='PMRA', format='1D', unit='DEG/YR', array=pmra)
+    col12 = fits.Column(name='PMDEC', format='1D', unit='DEG/YR', array=pmdec)
+    col13 = fits.Column(name='PMRA_ERR', format='1D', unit='DEG/YR', array=[0])
+    col14 = fits.Column(name='PMDEC_ERR', format='1D', unit='DEG/YR', array=[0])
+    col15 = fits.Column(name='PARALLAX', format='1E', unit='DEGREES', array=plx)
+    col16 = fits.Column(name='PARA_ERR', format='1E', unit='DEGREES', array=[0])
+    col17 = fits.Column(name='SPECTYP', format='16A', array=spectyp)
+
+    coldefs = fits.ColDefs([col1,col2,col3,col4,col5,col6,col7,col8,col9,
+                            col10,col11,col12,col13,col14,col15,col16,col17])
+    hdu = fits.BinTableHDU.from_columns(coldefs)
 
     hdu.header['EXTNAME'] = 'OI_TARGET'
     hdu.header['OI_REVN'] = 2, 'Revision number of the table definition'
@@ -250,25 +263,23 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
         staxyz.append(line)
 
     sta_index = np.arange(N_ap) + 1
-    print('sta_index', sta_index)
 
     pscale = dic['info']['PSCALE']/1000.  # arcsec
     isz = dic['info']['ISZ']  # Size of the image to extract NRM data
     fov = [pscale * isz] * N_ap
     fovtype = ['RADIUS'] * N_ap
 
-    hdu = fits.BinTableHDU.from_columns(fits.ColDefs((
-        fits.Column(name='TEL_NAME', format='16A',
-                    array=tel_name),
-        fits.Column(name='STA_NAME', format='16A',
-                    array=sta_name),
-        fits.Column(name='STA_INDEX', format='1I', array=sta_index),
-        fits.Column(name='DIAMETER', unit='METERS',
-                    format='1E', array=diameter),
-        fits.Column(name='STAXYZ', unit='METERS', format='3D', array=staxyz),
-        fits.Column(name='FOV', unit='ARCSEC', format='1D', array=fov),
-        fits.Column(name='FOVTYPE', format='6A', array=fovtype),
-    )))
+
+    col1 = fits.Column(name='TEL_NAME', format='16A', array=tel_name)
+    col2 = fits.Column(name='STA_NAME', format='16A', array=sta_name)
+    col3 = fits.Column(name='STA_INDEX', format='1I', array=sta_index)
+    col4 = fits.Column(name='DIAMETER', unit='METERS', format='1E', array=diameter)
+    col5 = fits.Column(name='STAXYZ', unit='METERS', format='3D', array=staxyz)
+    col6 = fits.Column(name='FOV', unit='ARCSEC', format='1D', array=fov)
+    col7 = fits.Column(name='FOVTYPE', format='6A', array=fovtype)
+
+    coldefs = fits.ColDefs([col1, col2, col3, col4, col5, col6, col7])
+    hdu = fits.BinTableHDU.from_columns(coldefs)
 
     hdu.header['EXTNAME'] = 'OI_ARRAY'
     hdu.header['ARRAYX'] = float(0)
@@ -292,33 +303,41 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     data = dic['OI_VIS']
     npts = len(dic['OI_VIS']['VISAMP'])
 
-    print('NPTS:', npts)
-    print('FLAGS:', data['FLAG'], len(data['FLAG']))
-
     sta_index = Format_STAINDEX_V2(data['STA_INDEX'])
-    hdu = fits.BinTableHDU.from_columns(fits.ColDefs([
-        fits.Column(name='TARGET_ID', format='{}I'.format(str(npts)), # RAC changed format strings
-                    array=[data['TARGET_ID']]*npts),
-        fits.Column(name='TIME', format='{}D'.format(str(npts)), unit='SECONDS',
-                    array=[data['TIME']]*npts),
-        fits.Column(name='MJD', unit='DAY', format='{}D'.format(str(npts)),
-                    array=[data['MJD']]*npts),
-        fits.Column(name='INT_TIME', format='{}D'.format(str(npts)), unit='SECONDS',
-                    array=[data['INT_TIME']]*npts),
-        fits.Column(name='VISAMP', format='1D', array=data['VISAMP']),
-        fits.Column(name='VISAMPERR', format='1D', array=data['VISAMPERR']),
-        fits.Column(name='VISPHI', format='1D', unit='DEGREES',
-                    array=np.rad2deg(data['VISPHI'])),
-        fits.Column(name='VISPHIERR', format='1D', unit='DEGREES',
-                    array=np.rad2deg(data['VISPHIERR'])),
-        fits.Column(name='UCOORD', format='1D',
-                    unit='METERS', array=data['UCOORD']),
-        fits.Column(name='VCOORD', format='1D',
-                    unit='METERS', array=data['VCOORD']),
-        fits.Column(name='STA_INDEX', format='2I', array=sta_index),
-        fits.Column(name='FLAG', format='1L', array=data['FLAG'])
-    ]))
+    some_keys = ['TARGET_ID','TIME','MJD','INT_TIME']
+    for akey in some_keys:
+        try:
+            if len(data[akey]) > 1:
+                data[akey] = data[akey][0]
+                if len(data[akey]) > 1:
+                    data[akey] = data[akey][0]
+        except TypeError:
+            pass
 
+    col1 = fits.Column(name='TARGET_ID', format='1I',
+                    array=[data['TARGET_ID']]*npts)
+    col2 = fits.Column(name='TIME', format='1D', unit='SECONDS',
+                    array=[data['TIME']]*npts)
+    col3 = fits.Column(name='MJD', unit='DAY', format='1D',
+                    array=[data['MJD']]*npts)
+    col4 = fits.Column(name='INT_TIME', format='1D', unit='SECONDS',
+                    array=[data['INT_TIME']]*npts)
+    col5 = fits.Column(name='VISAMP', format='1D', array=data['VISAMP'])
+    col6 = fits.Column(name='VISAMPERR', format='1D', array=data['VISAMPERR'])
+    col7 = fits.Column(name='VISPHI', format='1D', unit='DEGREES',
+                    array=np.rad2deg(data['VISPHI']))
+    col8 = fits.Column(name='VISPHIERR', format='1D', unit='DEGREES',
+                    array=np.rad2deg(data['VISPHIERR']))
+    col9 = fits.Column(name='UCOORD', format='1D',
+                    unit='METERS', array=data['UCOORD'])
+    col10 = fits.Column(name='VCOORD', format='1D',
+                    unit='METERS', array=data['VCOORD'])
+    col11 = fits.Column(name='STA_INDEX', format='2I', array=sta_index)
+    col12 = fits.Column(name='FLAG', format='1L', array=data['FLAG'])
+
+    coldefs = fits.ColDefs([col1, col2, col3, col4, col5, col6, col7, col8, col9,
+                            col10, col11, col12])
+    hdu = fits.BinTableHDU.from_columns(coldefs)
 
     hdu.header['OI_REVN'] = 2, 'Revision number of the table definition'
     hdu.header['EXTNAME'] = 'OI_VIS'
@@ -336,24 +355,36 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     data = dic['OI_VIS2']
     npts = len(dic['OI_VIS2']['VIS2DATA'])
 
-    hdu = fits.BinTableHDU.from_columns(fits.ColDefs([
-        fits.Column(name='TARGET_ID', format='{}I'.format(str(npts)), # RAC changed format strings
-                    array=[data['TARGET_ID']]*npts),
-        fits.Column(name='TIME', format='{}D'.format(str(npts)), unit='SECONDS',
-                    array=[data['TIME']]*npts),
-        fits.Column(name='MJD', unit='DAY', format='{}D'.format(str(npts)),
-                    array=[data['MJD']]*npts),
-        fits.Column(name='INT_TIME', format='{}D'.format(str(npts)), unit='SECONDS',
-                    array=[data['INT_TIME']]*npts),
-        fits.Column(name='VIS2DATA', format='1D', array=data['VIS2DATA']),
-        fits.Column(name='VIS2ERR', format='1D', array=data['VIS2ERR']),
-        fits.Column(name='UCOORD', format='1D',
-                    unit='METERS', array=data['UCOORD']),
-        fits.Column(name='VCOORD', format='1D',
-                    unit='METERS', array=data['VCOORD']),
-        fits.Column(name='STA_INDEX', format='2I', array=sta_index),
-        fits.Column(name='FLAG', format='1L', array=data['FLAG'])
-    ]))
+    some_keys = ['TARGET_ID', 'TIME', 'MJD', 'INT_TIME']
+    for akey in some_keys:
+        try:
+            if len(data[akey]) > 1:
+                data[akey] = data[akey][0]
+                if len(data[akey]) > 1:
+                    data[akey] = data[akey][0]
+        except TypeError:
+            pass
+
+    col1 = fits.Column(name='TARGET_ID', format='1I',
+                    array=[data['TARGET_ID']]*npts)
+    col2 = fits.Column(name='TIME', format='1D', unit='SECONDS',
+                    array=[data['TIME']]*npts)
+    col3 = fits.Column(name='MJD', unit='DAY', format='1D',
+                    array=[data['MJD']]*npts)
+    col4 = fits.Column(name='INT_TIME', format='1D', unit='SECONDS',
+                    array=[data['INT_TIME']]*npts)
+    col5 = fits.Column(name='VIS2DATA', format='1D', array=data['VIS2DATA'])
+    col6 = fits.Column(name='VIS2ERR', format='1D', array=data['VIS2ERR'])
+    col7 = fits.Column(name='UCOORD', format='1D',
+                    unit='METERS', array=data['UCOORD'])
+    col8 = fits.Column(name='VCOORD', format='1D',
+                    unit='METERS', array=data['VCOORD'])
+    col9 = fits.Column(name='STA_INDEX', format='2I', array=sta_index)
+    col10 = fits.Column(name='FLAG', format='1L', array=data['FLAG'])
+
+    coldefs = fits.ColDefs([col1, col2, col3, col4, col5, col6, col7, col8, col9,
+                            col10])
+    hdu = fits.BinTableHDU.from_columns(coldefs)
 
     hdu.header['EXTNAME'] = 'OI_VIS2'
     hdu.header['INSNAME'] = dic['info']['INSTRUME']
@@ -372,31 +403,42 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     npts = len(dic['OI_T3']['T3PHI'])
 
     sta_index = Format_STAINDEX_T3(data['STA_INDEX'])
+    some_keys = ['TARGET_ID', 'TIME', 'MJD', 'INT_TIME']
+    for akey in some_keys:
+        try:
+            if len(data[akey]) > 1:
+                data[akey] = data[akey][0]
+                if len(data[akey]) > 1:
+                    data[akey] = data[akey][0]
+        except TypeError:
+            pass
 
-    hdu = fits.BinTableHDU.from_columns(fits.ColDefs((
-        fits.Column(name='TARGET_ID', format='{}I'.format(str(npts)), array=[1]*npts), # RAC changed format strings
-        fits.Column(name='TIME', format='{}D'.format(str(npts)), unit='SECONDS', array=[0]*npts),
-        fits.Column(name='MJD', format='{}D'.format(str(npts)), unit='DAY',
-                    array=[data['MJD']]*npts),
-        fits.Column(name='INT_TIME', format='{}D'.format(str(npts)), unit='SECONDS',
-                    array=[data['INT_TIME']]*npts),
-        fits.Column(name='T3AMP', format='1D', array=data['T3AMP']),
-        fits.Column(name='T3AMPERR', format='1D', array=data['T3AMPERR']),
-        fits.Column(name='T3PHI', format='1D', unit='DEGREES',
-                    array=np.rad2deg(data['T3PHI'])),
-        fits.Column(name='T3PHIERR', format='1D', unit='DEGREES',
-                    array=np.rad2deg(data['T3PHIERR'])),
-        fits.Column(name='U1COORD', format='1D',
-                    unit='METERS', array=data['U1COORD']),
-        fits.Column(name='V1COORD', format='1D',
-                    unit='METERS', array=data['V1COORD']),
-        fits.Column(name='U2COORD', format='1D',
-                    unit='METERS', array=data['U2COORD']),
-        fits.Column(name='V2COORD', format='1D',
-                    unit='METERS', array=data['V2COORD']),
-        fits.Column(name='STA_INDEX', format='3I', array=sta_index),
-        fits.Column(name='FLAG', format='1L', array=data['FLAG'])
-    )))
+    col1 = fits.Column(name='TARGET_ID', format='1I', array=[1]*npts)
+    col2 = fits.Column(name='TIME', format='1D', unit='SECONDS', array=[0]*npts)
+    col3 = fits.Column(name='MJD', format='1D', unit='DAY',
+                    array=[data['MJD']]*npts)
+    col4 = fits.Column(name='INT_TIME', format='1D', unit='SECONDS',
+                    array=[data['INT_TIME']]*npts)
+    col5 = fits.Column(name='T3AMP', format='1D', array=data['T3AMP'])
+    col6 = fits.Column(name='T3AMPERR', format='1D', array=data['T3AMPERR'])
+    col7 = fits.Column(name='T3PHI', format='1D', unit='DEGREES',
+                    array=np.rad2deg(data['T3PHI']))
+    col8 = fits.Column(name='T3PHIERR', format='1D', unit='DEGREES',
+                    array=np.rad2deg(data['T3PHIERR']))
+    col9 = fits.Column(name='U1COORD', format='1D',
+                    unit='METERS', array=data['U1COORD'])
+    col10 = fits.Column(name='V1COORD', format='1D',
+                    unit='METERS', array=data['V1COORD'])
+    col11 = fits.Column(name='U2COORD', format='1D',
+                    unit='METERS', array=data['U2COORD'])
+    col12 = fits.Column(name='V2COORD', format='1D',
+                    unit='METERS', array=data['V2COORD'])
+    col13 = fits.Column(name='STA_INDEX', format='3I', array=sta_index)
+    col14 = fits.Column(name='FLAG', format='1L', array=data['FLAG'])
+
+    coldefs = fits.ColDefs([col1, col2, col3, col4, col5, col6, col7, col8, col9,
+                            col10, col11, col12, col13, col14])
+    hdu = fits.BinTableHDU.from_columns(coldefs)
 
     hdu.header['EXTNAME'] = 'OI_T3'
     hdu.header['INSNAME'] = dic['info']['INSTRUME']
