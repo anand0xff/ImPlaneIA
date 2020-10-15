@@ -831,10 +831,8 @@ def calib_dicts(dct_t, dct_c):
     Returns:
         calib_dict (dict): oifits-compatible dictionary of calibrated observables/info
     """
-    #print(dct_t['info'])
     
     cp_t = dct_t['OI_T3']['T3PHI']
-    print('cp_t type', type(cp_t))
     cp_c = dct_c['OI_T3']['T3PHI']
     fa_t = dct_t['OI_VIS2']['VIS2DATA']
     fa_c = dct_t['OI_VIS2']['VIS2DATA']
@@ -853,8 +851,7 @@ def calib_dicts(dct_t, dct_c):
     calib_dict['OI_VIS2']['VIS2DATA'] = fa_out
     calib_dict['OI_T3']['T3PHIERR'] = cperr_out
     calib_dict['OI_VIS2']['VIS2EE'] = faerr_out
-    print('data types:', type(cp_out), type(fa_out))
-    print('data types:', type(cperr_out), type(faerr_out))
+
     return calib_dict
 
 
@@ -876,18 +873,10 @@ def calibrate_oifits(oif_t, oif_c, oifprefix='',datadir=None):
     # load in the nrm observables dict from each oifits
     targ = oifits.load(oif_t)
     calb = oifits.load(oif_c)
-    print('type of list in dict loaded from targ file and given to save in calibrate function:',
-          type(targ['OI_VIS']['MJD']))
-    print('shape:' , targ['OI_VIS']['MJD'].shape)
-    print('MJD:', targ['OI_VIS']['MJD'])
-    print('TARGET_ID', targ['OI_VIS']['TARGET_ID'])
-    print('TIME', targ['OI_VIS']['TIME'])
-    print('INT_TIME', targ['OI_VIS']['INT_TIME'])
     # calibrate the target by the calibrator
     # this produces a single calibrated nrm dict
     calibrated = calib_dicts(targ, calb)
 
-    #print('CALIB FLAGS shape', len(calibrated['OI_VIS']['FLAG']))
     oifits.save(calibrated, oifprefix=oifprefix, datadir=datadir)
     print('in directory %s' % datadir)
     return calibrated

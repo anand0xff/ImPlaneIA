@@ -1367,7 +1367,7 @@ def t3err(viserr, N=7):
     MIRAGE template file is in the string variable mirexample
 """
 
-def amisim2mirage(datadir, amisimfns, mirexample, filt, verbose=False):
+def amisim2mirage(datadir, amisimfns, mirexample, filt, verbose=False, trim2sub80=True):
     """
     datadir: where input amisim files (cubes or 2d) are located
     amisimfns: one or a list/tuple of simulated data files
@@ -1404,7 +1404,12 @@ def amisim2mirage(datadir, amisimfns, mirexample, filt, verbose=False):
         
         mirobj[1].data = mirobj[1].data.astype(np.float32)
         mirobj[1].data = fobj_sim[0].data # replace with ami_sim data
-        mirobj[1].data = mirobj[1].data[:,:80,:80]  # trim ends of cols, rows (if needed) to 80 x 80
+        if trim2sub80:  # trim ends of cols, rows (if needed) to 80 x 80
+            mirobj[1].data = mirobj[1].data[:,:80,:80]  # trim ends of cols, rows (if needed) to 80 x 80
+            print("INFO: utils.amisim2mirage will trim input image(s) to SUB80")
+            print("      but we still need trim to array center code here!")
+        else:
+            print("INFO: utils.amisim2mirage will not trim input image(s) to SUB80")
 
         # Transfer non-conflicting keywords from sim data to mirage file header
         mirkeys = list(mirobj[0].header.keys())

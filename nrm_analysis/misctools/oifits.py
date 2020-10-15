@@ -450,9 +450,9 @@ def save(dic, filename=None, oifprefix=None, datadir=None, verbose=False):
     # ------------------------------
     #          Save file
     # ------------------------------
-    hdulist.writeto(datadir + filename, overwrite=True)
+    hdulist.writeto(os.path.join(datadir,filename), overwrite=True)
     cprint('\n\n### OIFITS CREATED (%s).' % filename, 'cyan')
-    return None
+
 
 
 def load(filename, target=None, ins=None, mask=None, include_vis=True):
@@ -471,7 +471,8 @@ def load(filename, target=None, ins=None, mask=None, include_vis=True):
     `include_vis` {boolean}:
         If True, include visibilities amplitude and phase in the oifits (default: True),\n
     """
-    fitsHandler = fits.open(filename)
+    fitsHandler = fits.open(filename, mode='readonly')
+
     hdr = fitsHandler[0].header
 
     dic = {}
@@ -612,7 +613,7 @@ def load(filename, target=None, ins=None, mask=None, include_vis=True):
                 dic['OI_T3']['BL'] = hdu.data['FREQ']
             except KeyError:
                 dic['OI_T3']['BL'] = bl_cp
-
+    fitsHandler.close()
     return dic
 
 
