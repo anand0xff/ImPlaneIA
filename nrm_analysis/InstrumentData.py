@@ -447,6 +447,8 @@ class NIRISS:
             self.throughput = utils.trim_webbpsf_filter(self.filt, specbin=lam_bin[self.filt])
         except:
             self.throughput = utils.tophatfilter(lam_c[self.filt], lam_w[self.filt], npoints=11)
+            
+        self.throughput = np.array(self.throughput)
 
         try:
             self.wls = [utils.combine_transmission(self.throughput, src), ]
