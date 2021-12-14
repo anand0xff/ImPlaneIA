@@ -33,7 +33,7 @@ class ObservablesFromText():
 
     def __init__(self, nh, txtpath=None,
                  oifpath=None,
-                 observables=("phases", "amplitudes", "CPs", "CAs"),
+                 observables=("phases", "amplitudes", "CPs", "CAs", "fringepistons"),
                  oifinfofn='info4oif_dict.pkl',
                  angunit="radians",
                  verbose=True):
@@ -92,8 +92,9 @@ class ObservablesFromText():
         self.fp = np.zeros((self.nslices, self.nbl))
         self.fa = np.zeros((self.nslices, self.nbl))
         self.cp = np.zeros((self.nslices, self.ncp))
-        if len(self.observables) == 4:
+        if len(self.observables) > 3:
             self.ca = np.zeros((self.nslices, self.nca))
+            self.pistons = np.zeros((self.nslices, self.nh))
         self.angunit = angunit
         if verbose:
             print("ImPlaneIA text output angle unit: %s" % angunit)
@@ -245,9 +246,9 @@ class ObservablesFromText():
             self.fa[slice:] = np.loadtxt(fnheads[1].format(slice))
             self.cp[slice:] = np.rad2deg(np.loadtxt(fnheads[2].format(slice)))# * 180.0 / np.pi
             # Do the same to-degrees conversion with segment phases when we get to them!
-            if len(self.observables) == 4:
+            if len(self.observables) > 3: # expecting CAs, fringepistons
                 self.ca[slice:] = np.loadtxt(fnheads[3].format(slice))
-
+                self.pistons[slice:] = np.rad2deg(np.loadtxt(fnheads[4].format(slice)))  # segment pistons in deg
         # read in pickle of the info oifits might need...
         pfd = open(self.txtpath+'/'+self.oifinfofn, 'rb')
         self.info4oif_dict = pickle.load(pfd)
@@ -431,65 +432,57 @@ def populate_NRM(nrm_t, method='med'):
     visamp_in = nrm_t.fa
     visphi_in = nrm_t.fp
     vis2_in = visamp_in**2
-
-    if method == 'multi':
-        vis2 = vis2_in.T
-        e_vis2 = np.zeros(vis2.shape)
-    elif method == 'med':
-        vis2 = np.median(vis2_in, axis=0)  # V2
-        e_vis2 = np.std(vis2_in, axis=0)  # Error on V2
-    else:
-        vis2 = np.mean(vis2_in, axis=0)  # V2
-        e_vis2 = np.std(vis2_in, axis=0)  # Error on V2
-
-    if method == 'multi':
-        visamp = visamp_in.T
-        e_visamp = np.zeros(visamp.shape)
-    elif method == 'med':
-        visamp = np.median(visamp_in, axis=0)  # Vis. amp
-        e_visamp = np.std(visamp_in, axis=0)  # Error on Vis. amp
-    else:
-        visamp = np.mean(visamp_in, axis=0)  # Vis. amp
-        e_visamp = np.std(visamp_in, axis=0)  # Error on Vis. amp
-
-    if method == 'multi':
-        visphi = visphi_in.T
-        e_visphi = np.zeros(visphi.shape)
-    elif method == 'med':
-        visphi = np.median(visphi_in, axis=0)  # Vis. phase
-        e_visphi = np.std(visphi_in, axis=0)
-    else:
-        visphi = np.mean(visphi_in, axis=0)  # Vis. phase
-        e_visphi = np.std(visphi_in, axis=0)  # Error on Vis. phase
-
     shift2pi = np.zeros(nrm_t.cp.shape)
-    shift2pi[nrm_t.cp >= 6] = 2*np.pi
-    shift2pi[nrm_t.cp <= -6] = -2*np.pi
+    shift2pi[nrm_t.cp >= 6] = 2 * np.pi
+    shift2pi[nrm_t.cp <= -6] = -2 * np.pi
 
     nrm_t.cp -= shift2pi
 
     cp_in = nrm_t.cp
     cpamp_in = nrm_t.ca
+    pistons_in = nrm_t.pistons
+
 
     if method == 'multi':
+        vis2 = vis2_in.T
+        e_vis2 = np.zeros(vis2.shape)
+        visamp = visamp_in.T
+        e_visamp = np.zeros(visamp.shape)
+        visphi = visphi_in.T
+        e_visphi = np.zeros(visphi.shape)
         cp = cp_in.T
         e_cp = np.zeros(cp.shape)
-    elif method == 'med':
-        cp = np.median(cp_in, axis=0)
-        e_cp = np.std(cp_in, axis=0)
-    else:
-        cp = np.mean(cp_in, axis=0)
-        e_cp = np.std(cp_in, axis=0)
-
-    if method == 'multi':
         cpamp = cpamp_in.T
         e_cpamp = np.zeros(cpamp.shape)
+        pist = pistons_in.T
+        e_pist = np.zeros(pist.shape)
     elif method == 'med':
+        vis2 = np.median(vis2_in, axis=0)  # V2
+        e_vis2 = np.std(vis2_in, axis=0)  # Error on V2
+        visamp = np.median(visamp_in, axis=0)  # Vis. amp
+        e_visamp = np.std(visamp_in, axis=0)  # Error on Vis. amp
+        visphi = np.median(visphi_in, axis=0)  # Vis. phase
+        e_visphi = np.std(visphi_in, axis=0)
+        cp = np.median(cp_in, axis=0)
+        e_cp = np.std(cp_in, axis=0)
         cpamp = np.median(cpamp_in, axis=0)
         e_cpamp = np.std(cpamp_in, axis=0)
+        pist = np.median(pistons_in, axis=0)
+        e_pist = np.std(pistons_in, axis=0)
     else:
+        vis2 = np.mean(vis2_in, axis=0)  # V2
+        e_vis2 = np.std(vis2_in, axis=0)  # Error on V2
+        visamp = np.mean(visamp_in, axis=0)  # Vis. amp
+        e_visamp = np.std(visamp_in, axis=0)  # Error on Vis. amp
+        visphi = np.mean(visphi_in, axis=0)  # Vis. phase
+        e_visphi = np.std(visphi_in, axis=0)  # Error on Vis. phase
+        cp = np.mean(cp_in, axis=0)
+        e_cp = np.std(cp_in, axis=0)
         cpamp = np.mean(cpamp_in, axis=0)
         e_cpamp = np.std(cpamp_in, axis=0)
+        pist = np.mean(pistons_in, axis=0)
+        e_pist = np.std(pistons_in, axis=0)
+
 
     output = {'vis2': vis2,
               'e_vis2': e_vis2,
@@ -500,7 +493,9 @@ def populate_NRM(nrm_t, method='med'):
               'cp': cp,
               'e_cp': e_cp,
               'cpamp': cpamp,
-              'e_cpamp': e_cpamp
+              'e_cpamp': e_cpamp,
+              'pist': pist,
+              'e_pist': e_pist
               }
 
     return dict2class(output)
@@ -801,7 +796,9 @@ def observable2dict(nrm, multi=False, display=False):
                     'ISZ': 77,  # size of the image needed (or fov)
                     'NFILE': 0,
                     'PA': info4oif['pa'],
-                    'CTRS_EQT':info4oif['ctrs_eqt'] # mask hole coords rotated to equatotial
+                    'CTRS_EQT':info4oif['ctrs_eqt'], # mask hole coords rotated to equatotial
+                    'PISTONS': nrmd2c.pist, # RAC 2021
+                    'PIST_ERR': nrmd2c.e_pist
                     }
            }
 
@@ -896,7 +893,13 @@ def calib_dicts(dct_t, dct_c):
     cperr_out = np.sqrt(cperr_t**2. + cperr_c**2.)
     sqverr_out = np.sqrt(sqverr_t**2. + sqverr_c**2.)
     vaerr_out = np.sqrt(vaerr_t**2. + vaerr_c**2.)
-
+    # include pistons and piston errors from target and calibrator
+    pistons_t = dct_t['OI_ARRAY']['PISTONS']
+    pisterr_t = dct_t['OI_ARRAY']['PIST_ERR']
+    pistons_c = dct_c['OI_ARRAY']['PISTONS']
+    pisterr_c = dct_c['OI_ARRAY']['PIST_ERR']
+    # sum in quadrature errors from target and calibrator pistons
+    pisterr_out = np.sqrt(pisterr_t**2 + pisterr_c**2)
     # copy the target dict and modify with the calibrated observables
     calib_dict = dct_t.copy()
     calib_dict['OI_T3']['T3PHI'] = cp_out
@@ -907,6 +910,13 @@ def calib_dicts(dct_t, dct_c):
     calib_dict['OI_VIS']['VISAMPERR'] = vaerr_out
     # preserve the name of the calibrator star
     calib_dict['info']['CALIB'] = dct_c['info']['OBJECT']
+    # target and calibrator pistons
+    # remove plain "pistons" key from dict
+    if 'PISTONS' in calib_dict['OI_ARRAY']:
+        del calib_dict['OI_ARRAY']['PISTONS']
+    calib_dict['OI_ARRAY']['PISTON_T'] = pistons_t
+    calib_dict['OI_ARRAY']['PISTON_C'] = pistons_c
+    calib_dict['OI_ARRAY']['PIST_ERR'] = pisterr_out
 
     return calib_dict
 

@@ -146,7 +146,7 @@ class FringeFitter:
         #######################################################################
         # Create OI text & oifits directories if they don't already exist
         try:
-            os.mkdir(self.oitdir)
+            os.makedirs(self.oitdir)
         except:
             if self.interactive is True:
                 print(self.oitdir+" Already exists, rewrite its contents? (y/n)")
@@ -160,7 +160,7 @@ class FringeFitter:
             else:
                 pass
         try:
-            os.mkdir(self.oifdir)
+            os.makedirs(self.oifdir)
         except FileExistsError:
             pass
 

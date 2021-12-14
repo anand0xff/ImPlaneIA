@@ -263,6 +263,21 @@ def save(dic, filename=None, datadir=None, verbose=False):
         ctrs_eqt = dic['info']['CTRS_EQT']
     except KeyError:
         ctrs_eqt = dic['OI_ARRAY']['CTRS_EQT']
+    # pistons could be either in info dict if saving raw oifits
+    # or in OI_ARRAY as PISTON_T, PISTON_C, PIST_ERR if saving calibrated oifits
+    # or someone could be re-saving a loaded raw oifits?
+    try:
+        piston_t = dic['OI_ARRAY']['PISTON_T']
+        piston_c = dic['OI_ARRAY']['PISTON_C']
+        pist_err = dic['OI_ARRAY']['PIST_ERR']
+    except KeyError:
+        try:
+            pistons = dic['OI_ARRAY']['PISTONS']
+            pist_err = dic['OI_ARRAY']['PIST_ERR']
+        except KeyError:
+            pistons = dic['info']['PISTONS']
+            pist_err = dic['info']['PIST_ERR']
+
 
     N_ap = len(staxy)
 
@@ -284,7 +299,16 @@ def save(dic, filename=None, datadir=None, verbose=False):
     isz = dic['info']['ISZ']  # Size of the image to extract NRM data
     fov = [pscale * isz] * N_ap
     fovtype = ['RADIUS'] * N_ap
-
+    try:
+        if len(pistons.shape) == 1: # figure out if it's multi-slice or not
+            nslice = 1
+        else:
+            nslice = pistons.shape[1] # this would cause an error if not multi-slice
+    except:
+        if len(piston_t.shape) == 1:
+            nslice = 1
+        else:
+            nslice = piston_t.shape[1]
 
     col1 = fits.Column(name='TEL_NAME', format='16A', array=tel_name)
     col2 = fits.Column(name='STA_NAME', format='16A', array=sta_name)
@@ -294,8 +318,20 @@ def save(dic, filename=None, datadir=None, verbose=False):
     col6 = fits.Column(name='FOV', unit='ARCSEC', format='1D', array=fov)
     col7 = fits.Column(name='FOVTYPE', format='6A', array=fovtype)
     col8 = fits.Column(name='CTRS_EQT', unit='METERS', format='2D', array=ctrs_eqt) # for debugging
-
-    coldefs = fits.ColDefs([col1, col2, col3, col4, col5, col6, col7, col8])
+    try:
+        # plain "pistons" will only be defined if this is raw oifits
+        col9 = fits.Column(name='PISTONS', unit='DEGREES', format='%dD'%nslice, array=pistons) # RAC 2021
+        col10= fits.Column(name='PIST_ERR', unit='DEGREES', format='%dD'%nslice, array=pist_err)
+    except NameError:
+        col9 = fits.Column(name='PISTON_T', unit='DEGREES', format='%dD' % nslice, array=piston_t)
+        col10 = fits.Column(name='PISTON_C', unit='DEGREES', format='%dD' % nslice, array=piston_c)
+        col11 = fits.Column(name='PIST_ERR', unit='DEGREES', format='%dD' % nslice, array=pist_err)
+    try:
+        # if col11 is defined it has targ and cal pistons
+        coldefs = fits.ColDefs([col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11])
+    except NameError:
+        coldefs = fits.ColDefs([col1, col2, col3, col4, col5, col6, col7, col8, col9, col10])
+    # that was a very gross way to do that
     hdu = fits.BinTableHDU.from_columns(coldefs)
 
     hdu.header['EXTNAME'] = 'OI_ARRAY'
@@ -330,10 +366,10 @@ def save(dic, filename=None, datadir=None, verbose=False):
                     data[akey] = data[akey][0]
         except TypeError:
             pass
-    if len(data['VISAMP'].shape) == 1: # figure out if it's multi-slice or not
-        nslice = 1
-    else:
-        nslice = data['VISAMP'].shape[1] # this would cause an error if not multi-slice
+    # if len(data['VISAMP'].shape) == 1: # figure out if it's multi-slice or not
+    #     nslice = 1
+    # else:
+    #     nslice = data['VISAMP'].shape[1] # this would cause an error if not multi-slice
     col1 = fits.Column(name='TARGET_ID', format='1I',
                     array=[data['TARGET_ID']]*npts)
     col2 = fits.Column(name='TIME', format='1D', unit='SECONDS',
@@ -559,7 +595,9 @@ def load(filename, target=None, ins=None, mask=None, include_vis=True):
                 staxy = np.delete(staxyz, -1, 1)
                 dic['OI_ARRAY'] = {'STAXYZ': staxyz,
                                    'STAXY': staxy,
-                                   'CTRS_EQT': hdu.data['CTRS_EQT']
+                                   'CTRS_EQT': hdu.data['CTRS_EQT'],
+                                   'PISTONS': hdu.data['PISTONS'],
+                                   'PIST_ERR': hdu.data['PIST_ERR']
                                    }
 
             if hdu.header['EXTNAME'] == 'OI_WAVELENGTH':
