@@ -12,14 +12,6 @@ import sys
 #sys.path.insert(0, os.path.join(os.path.dirname(__file__),'../../'))
 # print(sys.path)
 
-try:
-    import oifits
-    print('oifits successfully imported')
-except ImportError:
-    print('Module oifits not found. Please include it in your path')    
-    sys.exit()
-
-
 #import nrm_analysis
 import nrm_analysis.nrm_core as nrm_core
 import nrm_analysis.InstrumentData as InstrumentData
