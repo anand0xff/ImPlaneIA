@@ -118,7 +118,7 @@ class NIRISS:
     
         # USEBP is USEDQ in the rest of code - use
         self.usedq = usebp
-        print("InstrumentData.NIRISS: avoid fitting DO_NOT_USE bad pixels flagged in DQ extension", self.usedq)
+        print("Fitting omits bad pixels (identified by DO_NOT_USE value in the DQ extension)")
         self.jwst_dqflags() # creates dicts self.bpval, self.bpgroup
         # self.bpexist set True/False if  DQ fits image extension exists/doesn't
 
