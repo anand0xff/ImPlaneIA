@@ -20,6 +20,8 @@ from astropy.time.core import Time
 from matplotlib import pyplot as plt
 from munch import munchify as dict2class
 from scipy.special import comb
+from scipy import stats
+import copy
 
 import nrm_analysis.misctools.oifits as oifits
 
@@ -953,6 +955,105 @@ def calibrate_oifits(oif_t, oif_c, oifn=None, oifdir=None, **kwargs):
     oifits.save(calibrated, filename=oifn, datadir=oifdir)
     print('\n in oifits directory {0:s}'.format(oifdir))
     return calibrated
+
+def frame_select(calintsfn, nsigma=1, save_mtfs=True):
+    """
+    Takes a calints file and performs frame selection based on the FT of each integration.
+    Integrations where the sum of the central 9 pixels of the MTF is more than nsigma from the mean
+    are discarded. Returns list of good indices.
+    """
+    with fits.open(calintsfn) as hdu:
+        data = hdu['SCI'].data
+    imsz = data.shape
+    if len(imsz) != 3:
+        raise Exception('Image must be 3d multi-integration (calints file)')
+    maxlist = []
+    for j in range(imsz[0]):
+        maxlist += [np.unravel_index(np.argmax(data[j]), data[j].shape)] 
+    maxlist = np.array(maxlist)
+    xh = min(imsz[1] - stats.mode(maxlist[:, 0]).mode, stats.mode(maxlist[:, 0]).mode - 4) # the bottom 4 rows are reference pixels
+    yh = min(imsz[2] - stats.mode(maxlist[:, 1]).mode, stats.mode(maxlist[:, 1]).mode - 0)
+    sh = min(xh, yh)
+    peak = stats.mode(maxlist).mode
+    peak0,peak1 = peak[0][0],peak[0][1]
+    print('      Cropping all frames to %.0fx%.0f pixels' % (2*sh+1, 2*sh+1))
+    centered_data = data[:,int(peak0-sh):int(peak0+sh+1),int(peak1-sh):int(peak1+sh+1)]
+    # Code adapted from Joel SB's SAMpip
+    mtf_ims = np.zeros_like(centered_data)
+    peaks = np.zeros(imsz[0])
+    for www in range(imsz[0]):
+        im = np.abs(np.fft.fftshift(np.fft.ifft2(centered_data[www,:,:])))
+        mtf_ims[www,:,:] = im
+        ind_peakx, ind_peaky = np.where(im == np.max(im))
+        peaks[www] = np.sum(im[int(ind_peakx-1):int(ind_peakx+2), int(ind_peaky-1):int(ind_peaky+2)])
+    [indx] = np.where((peaks >= np.mean(peaks)-np.std(peaks)*nsigma) & (peaks <= np.mean(peaks)+np.std(peaks)*nsigma))
+    ngood = len(indx)
+    nbad = imsz[0] - ngood
+    print('      %i/%i frames rejected with %.1f sigma threshold' %(nbad,imsz[0],nsigma))
+    if save_mtfs==True:
+        mtf_name = calintsfn.replace('.fits','_mtfs.fits')
+        fits.writeto(mtf_name, mtf_ims, overwrite=True)
+        print('MTFs saved to %s' % mtf_name)
+    return indx
+
+
+def clip_oifits(oifitsfn, good_indices, method='med'):
+    """
+    Takes an OIFITS filename and list of good integration indices and outputs
+    updated OIFITS files using only those integrations.
+    TO DO: save mtf peak sums, DC term, constant flux term somewhere in OIFITS header
+    """
+    indir, bn = os.path.split(oifitsfn)
+    nrm_dct = oifits.load(oifitsfn)
+    obsarr = nrm_dct['OI_VIS']['VISAMP'] # for checking observable array shape
+    print(obsarr.shape)
+    if (len(obsarr.shape)==1) | (obsarr.shape[1] == 1):
+        raise Exception('Multi-integration oifits file expected (2d observable arrays)')
+    print('Reading multi-integration OIFITS file...')
+    # arrays to update
+    namedict = {'OI_VIS':['VISAMP','VISAMPERR','VISPHI','VISPHIERR'],
+                'OI_VIS2':['VIS2DATA','VIS2ERR'],
+                'OI_T3':['T3AMP','T3AMPERR','T3PHI','T3PHIERR']}
+    
+    outdict_multi = copy.deepcopy(nrm_dct)
+    for extname in namedict:
+        for colname in namedict[extname]:
+            #print(nrm_dct[extname][colname].shape)
+            outarr = nrm_dct[extname][colname][:,good_indices]
+            print(extname, colname,nrm_dct[extname][colname].shape,'-->',outarr.shape)
+            outdict_multi[extname][colname] = outarr
+    #print(outdict['OI_VIS']['VISAMP'].shape) 
+    multi_outname = bn.replace('.oifits','_trim.oifits')
+    oifits.save(outdict_multi, filename=multi_outname, datadir=indir) # this saves the trimmed multi-oifits
+    # save updated averaged oifits too
+    # tricky... flow in implaneia is text files --> Observable object (class) --> observable2dict (multi or not multi)
+    # --> oifits.save. Need to re-average observables and make dict to write out here.
+    outdict_avg = copy.deepcopy(outdict_multi)
+    # default method in populate_NRM is median combination, apply that here too
+    for extname in namedict:
+        for colname in namedict[extname]:
+            if 'ERR' in colname:
+                # get the corresponding data column
+                datacol = colname.replace('ERR','')
+                if datacol == 'VIS2':
+                    datacol = 'VIS2DATA'
+                print(colname,'-->',datacol)
+                arr = outdict_multi[extname][datacol]
+                print(arr.shape)
+                #z now this is a sample of a population, so standard error of the mean...?
+                outarr = np.std(arr, axis=1)/np.sqrt(arr.shape[1])
+                print(colname,outarr)
+            else:
+                arr = outdict_multi[extname][colname]
+                if method=='med':
+                    outarr = np.median(arr, axis=1)
+                else:
+                    outarr = np.mean(arr, axis=1)
+            print('input shape:',arr.shape, 'output shape:',outarr.shape)
+            outdict_avg[extname][colname] = outarr
+    avg_outname = bn.replace('multi_','').replace('.oifits','_trim.oifits')
+    oifits.save(outdict_avg,filename=avg_outname,datadir=indir)
+
 
 
 if __name__ == "__main__":
