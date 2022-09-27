@@ -1020,7 +1020,7 @@ def clip_oifits(oifitsfn, good_indices, method='med'):
         for colname in namedict[extname]:
             #print(nrm_dct[extname][colname].shape)
             outarr = nrm_dct[extname][colname][:,good_indices]
-            print(extname, colname,nrm_dct[extname][colname].shape,'-->',outarr.shape)
+            # print(extname, colname,nrm_dct[extname][colname].shape,'-->',outarr.shape)
             outdict_multi[extname][colname] = outarr
     #print(outdict['OI_VIS']['VISAMP'].shape) 
     multi_outname = bn.replace('.oifits','_trim.oifits')
@@ -1037,19 +1037,15 @@ def clip_oifits(oifitsfn, good_indices, method='med'):
                 datacol = colname.replace('ERR','')
                 if datacol == 'VIS2':
                     datacol = 'VIS2DATA'
-                print(colname,'-->',datacol)
                 arr = outdict_multi[extname][datacol]
-                print(arr.shape)
                 #z now this is a sample of a population, so standard error of the mean...?
                 outarr = np.std(arr, axis=1)/np.sqrt(arr.shape[1])
-                print(colname,outarr)
             else:
                 arr = outdict_multi[extname][colname]
                 if method=='med':
                     outarr = np.median(arr, axis=1)
                 else:
                     outarr = np.mean(arr, axis=1)
-            print('input shape:',arr.shape, 'output shape:',outarr.shape)
             outdict_avg[extname][colname] = outarr
     avg_outname = bn.replace('multi_','').replace('.oifits','_trim.oifits')
     oifits.save(outdict_avg,filename=avg_outname,datadir=indir)
