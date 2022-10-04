@@ -17,6 +17,7 @@ import pickle
 
 import numpy as np
 from astropy.time.core import Time
+from astropy.io import fits
 from matplotlib import pyplot as plt
 from munch import munchify as dict2class
 from scipy.special import comb
