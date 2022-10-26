@@ -8,12 +8,15 @@ import os, sys
 import pickle
 import scipy
 from scipy.special import comb
+from scipy import ndimage
 import time
 import nrm_analysis.misctools.matrixDFT as matrixDFT
 import matplotlib.pyplot as plt
 import synphot
 import stsynphot
 from stsynphot import grid_to_spec
+import copy
+
 
 m_ = 1.0
 mm_ =  m_/1000.0
@@ -555,9 +558,11 @@ def center_imagepeak(img, r=None, cntrimg = True, dqm=False, verbose=False):
     Optional: dqmcrop, numpy 2d array,if dqmask array is passed.
 
     """
-    peakx, peaky, h = min_distance_to_edge(img)
+    peakx, peaky, h, xoff, yoff = min_distance_to_edge(img)
+    print(peakx, peaky, h, "in center_imagepeak")
     if r is None:
-        r = h.copy()
+        #r = h.copy()
+        r = copy.copy(h)
     else:
         pass
 
@@ -571,12 +576,12 @@ def center_imagepeak(img, r=None, cntrimg = True, dqm=False, verbose=False):
         print(np.where(cropped == cropped.max()))
 
 
-    if type(dqm) is not bool: return cropped, dqmcrop
+    if type(dqm) is not bool: return cropped, dqmcrop, xoff, yoff
     else:                     return cropped
     
 
 
-def min_distance_to_edge(img, cntrimg = False, verbose=False):
+def min_distance_to_edge(img, cntrimg = False, usecm=True, verbose=False):
     """Return pixel distance to closest detector edge.
 
     Parameters
@@ -597,19 +602,57 @@ def min_distance_to_edge(img, cntrimg = False, verbose=False):
     else:
         # Peak of the image can be anywhere
         ann = np.ones((img.shape[0], img.shape[1]))
-        
-    peakmask = np.where(img==np.nanmax(np.ma.masked_invalid(img[ann==1])))
-    # following line takes care of peaks at two or more identical-value max pixel locations:
-    peakx, peaky = peakmask[0][0], peakmask[1][0]
-    if verbose: print('utils.min_distance_from_edge: peaking on: ',np.nanmax(np.ma.masked_invalid(img[ann==1])))
-    if verbose: print('putils.min_distance_from_edge: peak x,y:', peakx, peaky)
 
-    dhigh = (img.shape[0] - peakx - 1, img.shape[1] - peaky - 1)
-    dlow = (peakx, peaky)
-    h0 = min((dhigh[0],dlow[0]))
-    h1 = min((dhigh[1],dlow[1]))
-    h = min(h0, h1)
-    return peakx, peaky, h # the 'half side' each way from the peak pixel
+    if usecm ==True:
+      peaks = ndimage.measurements.center_of_mass(img)
+      newpeaks=()
+      offsets=()
+      for i in peaks:
+            if i - int(i) >= 0.5:
+               peakx_off = i- np.ceil(i)
+               i = np.ceil(i)
+               newpeaks = newpeaks + (i,)
+               offsets = offsets + (peakx_off,)
+            elif (i - int(i)) <= 0.5:
+               peaky_off = i - int(i)
+               i = int(i)
+               newpeaks = newpeaks + (i,)
+               offsets = offsets + (peaky_off,)
+      print("newpeaks", newpeaks)  # Needed from cropping data around the pixel containing the centroid in utils.center_imagepeak
+      print("offset of centroid from pixel center of pixel containing centroid", offsets)   # Needed for fringefitting to use as offsets from pixel ctr of pixel containing centroid
+
+
+      
+      dhigh = (img.shape[0] - newpeaks[0] - 1, img.shape[1] - newpeaks[1] - 1)
+      dlow = (newpeaks[0], newpeaks[1])
+      h0 = min((dhigh[0],dlow[0]))
+      h1 = min((dhigh[1],dlow[1]))
+      h = min(h0, h1)
+      print("centroid found using ndimage.measurements.center_of_mass===========peaks[0], peaks[1], h============", peaks[0], peaks[1], h)
+      return newpeaks[0], newpeaks[1], h , offsets[0], offsets[1]# the 'half side' each way from the peak pixel
+ 
+    else:
+      peakmask = np.where(img==np.nanmax(np.ma.masked_invalid(img[ann==1])))
+      # following line takes care of peaks at two or more identical-value max pixel locations:
+      peakx, peaky = peakmask[0][0], peakmask[1][0]
+      if verbose: print('utils.min_distance_from_edge: peaking on: ',np.nanmax(np.ma.masked_invalid(img[ann==1])))
+      if verbose: print('putils.min_distance_from_edge: peak x,y:', peakx, peaky)
+
+      """    
+      peakmask = np.where(img==np.nanmax(np.ma.masked_invalid(img[ann==1])))
+      # following line takes care of peaks at two or more identical-value max pixel locations:
+      peakx, peaky = peakmask[0][0], peakmask[1][0]
+      if verbose: print('utils.min_distance_from_edge: peaking on: ',np.nanmax(np.ma.masked_invalid(img[ann==1])))
+      if verbose: print('putils.min_distance_from_edge: peak x,y:', peakx, peaky)
+      """
+        
+      dhigh = (img.shape[0] - peakx - 1, img.shape[1] - peaky - 1)
+      dlow = (peakx, peaky)
+      h0 = min((dhigh[0],dlow[0]))
+      h1 = min((dhigh[1],dlow[1]))
+      h = min(h0, h1)
+      print("===========peakx, peaky, h============", peakx, peaky, h)
+      return peakx, peaky, h # the 'half side' each way from the peak pixel
 
 def find_centroid(a, thresh, verbose=False):
     """Return centroid of input image

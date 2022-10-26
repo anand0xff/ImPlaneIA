@@ -88,7 +88,7 @@ class FringeFitter:
         if "weighted" in kwargs:
             self.weighted = kwargs["weighted"]
 
-        self.oversample = 3  
+        self.oversample = 3
         if "oversample" in kwargs:
             self.oversample = kwargs["oversample"]
 
@@ -297,7 +297,7 @@ def fit_fringes_parallel(args, threads):
     id_tag = args['id']
     self.prihdr, self.scihdr, self.scidata, self.dqmask = \
         self.instrument_data.read_data(filename)
-
+        
     try:
         os.makedirs(self.oitdir+self.instrument_data.rootfn)
     except:
@@ -340,48 +340,55 @@ def fit_fringes_single_integration(args):
     
     # Where appropriate, the slice under consideration is centered, and processed
     if self.instrument_data.arrname=="jwst_g7s6c":
-        # get the cropped image and identically-cropped bad pixel data:
-        self.ctrd, self.dqslice = utils.center_imagepeak(
-                                    self.scidata[slc,:,:], 
-                                    dqm=self.dqmask[slc,:,:]) 
+        # get the cropped image and identically-cropped bad pixel data: (get cropped data around the centroid of multiple peaks)
+         # Also get offsets of centroid from the center of the pixel containing the centroid. These are needed for fringefitting
+        self.ctrd, self.dqslice, xoffset, yoffset = utils.center_imagepeak(
+                                                   self.scidata[slc,:,:],
+                                                   dqm=self.dqmask[slc,:,:])
+        nrm.xpos = yoffset  # flip 0 and 1 to convert
+        nrm.ypos = xoffset # flip 0 and 1
+        nrm.psf_offset = nrm.xpos, nrm.ypos  # renamed .bestcenter to .psf_offset 
     else:
         self.ctrd = utils.center_imagepeak(self.scidata[slc,:,:])  
+    #Assuming self.psf_offset = None above
+
     
-
-    # store the 2D cropped image centered on the brightest pixel, 
+    # store the 2D cropped image centered on the brightest pixel,
     # bad pixels smoothed over
+    #nrm.reference = self.ctrd  # self.ctrd is the cropped image centered on the brightest pixel
 
+    #Commenting for Io calibration, use for point source
+    """
     if self.psf_offset_ff is None:
         # returned values have offsets x-y flipped:
-        # Finding centroids the Fourier way assumes no bad pixels case 
+        # Finding centroids the Fourier way assumes no bad pixels case
         #   - Fourier domain mean slope
 
         # offsets from brightest pixel ctr
         centroid = utils.find_centroid(self.ctrd, self.instrument_data.threshold)
-        # use flipped centroids to update centroid of image for JWST 
+        # use flipped centroids to update centroid of image for JWST
         # pixel coordinates: - note the flip of [0] and [1] to match DS9 view
         image_center = utils.centerpoint(self.ctrd.shape) + \
                             np.array((centroid[1], centroid[0])) # info only, unused
         nrm.xpos = centroid[1]  # flip 0 and 1 to convert
         nrm.ypos = centroid[0]  # flip 0 and 1
         nrm.psf_offset = nrm.xpos, nrm.ypos  # renamed .bestcenter to .psf_offset
-        if self.debug: 
+        if self.debug:
             print("nrm.core.fit_fringes_single_integration: utils.find_centroid() -> nrm.psf_offset")
     else:
         # user-provided psf_offset python-style offsets from array center are here.
         nrm.psf_offset = self.psf_offset_ff 
-
+     """
 
     nrm.make_model(fov=self.ctrd.shape[0], 
                    bandpass=nrm.bandpass, 
                    over=self.oversample,
                    psf_offset=nrm.psf_offset,  
                    pixscale=nrm.pixel)
-
     # again, fit just one slice...
     if self.instrument_data.arrname=="jwst_g7s6c":
-        nrm.fit_image(self.ctrd, 
-                      modelin=nrm.model, 
+        nrm.fit_image(self.ctrd,
+                      modelin=nrm.model,
                       psf_offset=nrm.psf_offset,
                       dqm=self.dqslice,
                       weighted=self.weighted)
