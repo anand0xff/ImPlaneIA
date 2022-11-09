@@ -998,7 +998,7 @@ def frame_select(calintsfn, nsigma=1, save_mtfs=True):
     return indx
 
 
-def clip_oifits(oifitsfn, good_indices, method='med'):
+def clip_oifits(oifitsfn, good_indices, method='med', suffix=''):
     """
     Takes an OIFITS filename and list of good integration indices and outputs
     updated OIFITS files using only those integrations.
@@ -1007,7 +1007,8 @@ def clip_oifits(oifitsfn, good_indices, method='med'):
     indir, bn = os.path.split(oifitsfn)
     nrm_dct = oifits.load(oifitsfn)
     obsarr = nrm_dct['OI_VIS']['VISAMP'] # for checking observable array shape
-    print(obsarr.shape)
+    if suffix == '':
+        suffix = 'trim'
     if (len(obsarr.shape)==1) | (obsarr.shape[1] == 1):
         raise Exception('Multi-integration oifits file expected (2d observable arrays)')
     print('Reading multi-integration OIFITS file...')
@@ -1023,12 +1024,9 @@ def clip_oifits(oifitsfn, good_indices, method='med'):
             outarr = nrm_dct[extname][colname][:,good_indices]
             # print(extname, colname,nrm_dct[extname][colname].shape,'-->',outarr.shape)
             outdict_multi[extname][colname] = outarr
-    #print(outdict['OI_VIS']['VISAMP'].shape) 
-    multi_outname = bn.replace('.oifits','_trim.oifits')
+    multi_outname = bn.replace('.oifits','_%s.oifits'%suffix)
     oifits.save(outdict_multi, filename=multi_outname, datadir=indir) # this saves the trimmed multi-oifits
     # save updated averaged oifits too
-    # tricky... flow in implaneia is text files --> Observable object (class) --> observable2dict (multi or not multi)
-    # --> oifits.save. Need to re-average observables and make dict to write out here.
     outdict_avg = copy.deepcopy(outdict_multi)
     # default method in populate_NRM is median combination, apply that here too
     for extname in namedict:
@@ -1048,7 +1046,7 @@ def clip_oifits(oifitsfn, good_indices, method='med'):
                 else:
                     outarr = np.mean(arr, axis=1)
             outdict_avg[extname][colname] = outarr
-    avg_outname = bn.replace('multi_','').replace('.oifits','_trim.oifits')
+    avg_outname = bn.replace('multi_','').replace('.oifits','_%s.oifits'%suffix)
     oifits.save(outdict_avg,filename=avg_outname,datadir=indir)
 
 
