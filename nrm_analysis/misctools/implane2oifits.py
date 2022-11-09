@@ -889,17 +889,18 @@ def calib_dicts(dct_t, dct_c):
     cp_out = dct_t['OI_T3']['T3PHI'] - dct_c['OI_T3']['T3PHI']
     sqv_out = dct_t['OI_VIS2']['VIS2DATA'] / dct_c['OI_VIS2']['VIS2DATA']
     va_out = dct_t['OI_VIS']['VISAMP'] / dct_c['OI_VIS']['VISAMP']
-    # add their errors in quadrature (sufficient for now) 1/2021
+    # now using correct propagation of error for multiplication/division
+    # which assumes uncorrelated Gaussian errors (not true...?)    
     cperr_t = dct_t['OI_T3']['T3PHIERR']
     cperr_c = dct_c['OI_T3']['T3PHIERR']
     sqverr_c = dct_t['OI_VIS2']['VIS2ERR']
     sqverr_t = dct_c['OI_VIS2']['VIS2ERR']
     vaerr_t = dct_t['OI_VIS']['VISAMPERR']
     vaerr_c = dct_c['OI_VIS']['VISAMPERR']
-    cperr_out = np.sqrt(cperr_t**2. + cperr_c**2.)
-    sqverr_out = np.sqrt(sqverr_t**2. + sqverr_c**2.)
-    vaerr_out = np.sqrt(vaerr_t**2. + vaerr_c**2.)
 
+    cperr_out = np.sqrt(cperr_t**2. + cperr_c**2.)
+    sqverr_out = sqv_out * np.sqrt((sqverr_t/dct_t['OI_VIS2']['VIS2DATA'])**2. + (sqverr_c/dct_c['OI_VIS2']['VIS2DATA'])**2.)
+    vaerr_out = va_out * np.sqrt((vaerr_t/dct_t['OI_VIS']['VISAMP'])**2. + (vaerr_c/dct_c['OI_VIS']['VISAMP'])**2.)
     # copy the target dict and modify with the calibrated observables
     calib_dict = dct_t.copy()
     calib_dict['OI_T3']['T3PHI'] = cp_out
