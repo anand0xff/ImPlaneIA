@@ -3,14 +3,17 @@ from __future__ import print_function
 import numpy as np
 import numpy.fft as fft
 from astropy.io import fits
+from astropy import units as u
 import os, sys
-import pickle as pickle
+import pickle
 import scipy
 from scipy.special import comb
 import time
-import poppy.matrixDFT as matrixDFT
-from webbpsf import specFromSpectralType
-
+import nrm_analysis.misctools.matrixDFT as matrixDFT
+import matplotlib.pyplot as plt
+import synphot
+import stsynphot
+from stsynphot import grid_to_spec
 
 m_ = 1.0
 mm_ =  m_/1000.0
@@ -535,19 +538,21 @@ def crosscorrelatePSFs(a, A, ov, verbose=False):
 #    print("deprecated - switch to using  'center_imagepeak'")
 #    return center_imagepeak(img, r='default')
        
-def center_imagepeak(img, r=None, cntrimg = True, bpd=False, verbose=False):
+def center_imagepeak(img, r=None, cntrimg = True, dqm=False, verbose=False):
 
-    """Return a cropped version of the input image centered on the peak pixel.
+    """Cropped version of the input image centered on the peak pixel.
 
     Parameters
     ----------
-    img : numpy input array
-    bpd : bad pixel array eg STScI MAST DQ extenion for JWST-NIRISS AmI 
+    img : numpy input 2d array
+    dqm : bad pixel location 2d numpy array of bools 
+          eg STScI MAST DQ extension locations with DO_NOT_USE flag up.
+    Disused: bpd : bad pixel array eg STScI MAST DQ extenion for JWST-NIRISS AmI 
 
     Returns
     -------
-    cropped: numpy array
-        Cropped to place the brightest pixel at the center of the img array
+    cropped: numpy 2d array Cropped so brightest pixel is at the center
+    Optional: dqmcrop, numpy 2d array,if dqmask array is passed.
 
     """
     peakx, peaky, h = min_distance_to_edge(img)
@@ -557,8 +562,8 @@ def center_imagepeak(img, r=None, cntrimg = True, bpd=False, verbose=False):
         pass
 
     cropped = img[int(peakx-r):int(peakx+r+1), int(peaky-r):int(peaky+r+1)]
-    if type(bpd) is not bool: 
-        bpdcrop = bpd[int(peakx-r):int(peakx+r+1), int(peaky-r):int(peaky+r+1)]
+    if type(dqm) is not bool: 
+        dqmcrop = dqm[int(peakx-r):int(peakx+r+1), int(peaky-r):int(peaky+r+1)]
 
     if verbose:
         print('Cropped image shape:',cropped.shape)
@@ -566,7 +571,7 @@ def center_imagepeak(img, r=None, cntrimg = True, bpd=False, verbose=False):
         print(np.where(cropped == cropped.max()))
 
 
-    if type(bpd) is not bool: return cropped, bpdcrop
+    if type(dqm) is not bool: return cropped, dqmcrop
     else:                     return cropped
     
 
@@ -792,41 +797,22 @@ def neighbor_median(ctr, s, a2):
     med = np.median(atmp[np.isnan(atmp)==False])
 
 
-def get_fits_filter(fitsheader, verbose=False):
-    wavestring = "WAVE"
-    weightstring = "WGHT"
-    filterlist = []
-    if verbose: print(fitsheader[:])
-    j =0
-    for j in range(len(fitsheader)):
-        if wavestring+str(j) in fitsheader:
-            wght = fitsheader[weightstring+str(j)]
-            wavl = fitsheader[wavestring+str(j)]  
-            if verbose: print("wave", wavl)
-            filterlist.append(np.array([wght,wavl]))
-    if verbose: print(filterlist)
-        #print "specbin - spec.shape", spec.shape
-    return filterlist
-
-
-def combine_transmission(filt, SRC):
-    ''' SRC is a spectral type string, e.g. A0V 
-        not the neatest, but gets the job done.'''
-    import pysynphot
-    filt_wls = np.zeros(len(filt))
-    filt_wght = np.zeros(len(filt))
-    for ii in range(len(filt)):
-        filt_wls[ii] = filt[ii][1] # in m
-        filt_wght[ii] = filt[ii][0]
-    src = specFromSpectralType(SRC)
-    src = src.resample(np.array(filt_wls)*1.0e10) # converts to angstrom for pysynphot
-    specwavl, specwghts = src.getArrays()
-    totalwght = specwghts * filt_wght
-    transmissionlist = []
-    ang_to_m = 1.0e-10
-    for ii in range(len(filt_wls)):
-        transmissionlist.append((totalwght[ii], filt_wls[ii]))
-    return transmissionlist
+# def get_fits_filter(fitsheader, verbose=False):
+#     wavestring = "WAVE"
+#     weightstring = "WGHT"
+#     filterlist = []
+#     if verbose: print(fitsheader[:])
+#     j =0
+#     for j in range(len(fitsheader)):
+#         if wavestring+str(j) in fitsheader:
+#             wght = fitsheader[weightstring+str(j)]
+#             wavl = fitsheader[wavestring+str(j)]
+#             if verbose: print("wave", wavl)
+#             filterlist.append(np.array([wght,wavl]))
+#     if verbose: print(filterlist)
+#         #print "specbin - spec.shape", spec.shape
+#     return filterlist
+#
 
 
 def makeA(nh, verbose=False):
@@ -1003,93 +989,212 @@ def nb_pistons(multiplier=1.0, debug=False):
         if debug: print("variance of piston OPD: %.1e rad" % (phi_nb_.var() * (4.0*np.pi*np.pi)))
         return phi_nb_ * 4.3*um_ # phi_nb in m
 
+# -----------------------------------------------------------------
+# Following functions added 2/22 by RAC to replace older filter/src
+# combination routines: get_webbpsf_filter(), trim_webbpsf_filter(),
+# combine_transmission(). Now use get_filt_spec(), get_src_spec(),
+# and combine_src_filt(). These use synphot and stsynphot directly to
+# avoid Poppy dependency (though much code is copied from Poppy funcs).
+# -----------------------------------------------------------------
 
-def get_webbpsf_filter(filtfile, specbin=None, trim=False, verbose=False):
+def get_filt_spec(filt, verbose=False):
     """
-    Returns array of [weight, wavelength_in_meters] empirically tested... 2014 Nov
-    specbin: integer, bin spectrum down by this factor
-    trim: (lambda_c, extend of 'live' spectrum), e.g. (2.77e-6, 0.4) trims below 0.8 and
-          above 1.2 lambda_c
+    Load WebbPSF filter throughput into synphot spectrum object
+    filt: string, known NIRISS AMI filter name
+    Returns:
+        synphot Spectrum object
     """
-    W = 1 # remove confusion - wavelength index
-    T = 0 # remove confusion - trans index after reding in...
-    f = fits.open(filtfile)
-    thru = f[1].data
-    f.close()
-    tmp_array = np.zeros((len(thru), 2))
-    for i in range(len(thru)):  
-        tmp_array[i,W] = thru[i][0] * 1.0e-10   # input in angst  _ANGSTROM = 1.0e-10
-        tmp_array[i,T] = thru[i][1]             # weights (peak unity, unnormalized sum)
-        if 0:
-            if i == len(thru)//2:
-                if verbose: print("input line: %d " % i)
-                if verbose: print("raw input spectral wavelength: %.3e " % thru[i][0]) 
-                if verbose: print("cvt input spectral wavelength: %.3e " % tmp_array[i,W]) 
+    goodfilts = ["F277W", "F380M", "F430M", "F480M"]
+    # make uppercase
+    filt = filt.upper()
+    if filt not in goodfilts:
+        raise Exception("Filter name %s is not a known NIRISS AMI filter. Choose one of: %s" % (filt, tuple(goodfilts)))
 
-    # remove leading and trailing throughput lines with 'flag' array of indices
-    flag = np.where(tmp_array[:,T]!=0)[0]
-    spec = np.zeros((len(flag), 2))
-    spec[:,:] = tmp_array[flag, :]
-
-    # rebin as desired - fewer wavelengths for debugginng quickly
-    if specbin:
-        smallshape = spec.shape[0]//specbin
-        if verbose: print("bin by",  specbin, "  from ", spec.shape[0], " to",  smallshape)
-        spec = spec[:smallshape*specbin, :]  # clip trailing 
-        spec = krebin(spec, (smallshape,2))
-        spec[:,W] = spec[:,W] / float(specbin) # krebin added up waves
-        spec[:,T] = spec[:,T] / float(specbin) # krebin added up trans too
-
-    if trim:
-        if verbose: print("TRIMming")
-        wl = spec[:,W].copy()
-        tr = spec[:,T].copy()
-        idx = np.where((wl > (1.0 - 0.5*trim[1])*trim[0]) & (wl < (1.0 + 0.5*trim[1])*trim[0]))
-        wl = wl[idx]
-        tr = tr[idx]
-        spec = np.zeros((len(idx[0]),2))
-        spec[:,1] = wl
-        spec[:,0] = tr
-        if verbose: print("post trim - spec.shape", spec.shape)
-
-    if verbose: print("post specbin - spec.shape", spec.shape)
-    if verbose: print("%d spectral samples " % len(spec[:,0]) + \
-          "between %.3f and %.3f um" % (spec[0,W]/um_,spec[-1,W]/um_))
- 
-    return spec
-
-def trim_webbpsf_filter(filt, specbin=None, plot=False, verbose=False):
-    if verbose: print("================== " + filt + " ===================")
-    beta = {"F277W":0.6, "F380M":0.15, "F430M":0.17, "F480M":0.2}
-    lamc = {"F277W":2.70e-6, "F380M":3.8e-6, "F430M":4.24e-6, "F480M":4.8e-6}
-    filterdirectory = os.getenv('WEBBPSF_PATH')+"/NIRISS/filters/" 
-    band = get_webbpsf_filter(filterdirectory+filt+"_throughput.fits", 
-                              specbin=specbin, 
-                              trim=(lamc[filt], beta[filt]))
-    np.set_printoptions(edgeitems=3, infstr='inf', linewidth=75, nanstr='nan', precision=8, 
-        suppress=False, threshold=1000, formatter=None)
-    if verbose: print("filter", filt, "band.shape", band.shape, band)
-    wl = band[:,1]
-    tr = band[:,0]
-    if plot: plt.plot(wl/um_, np.log10(tr), label=filt)
+    webbpsf_path = os.getenv('WEBBPSF_PATH')
+    filterdir = os.path.join(webbpsf_path, 'NIRISS/filters/')
+    filtfile = os.path.join(filterdir, filt + '_throughput.fits')
+    if verbose: print("\n Using filter file:", filtfile)
+    thruput = fits.getdata(filtfile)
+    wl_list = np.asarray([tup[0] for tup in thruput])  # angstroms
+    tr_list = np.asarray([tup[1] for tup in thruput])
+    band = synphot.spectrum.SpectralElement(synphot.models.Empirical1D, points=wl_list,
+                                            lookup_table=tr_list, keep_neg=False)
     return band
 
-def testmain():
-    import matplotlib.pyplot as plt
-    fig = plt.figure(1,figsize=(6,4.5),dpi=150)
-    trim_webbpsf_filter("F277W", specbin=6, plot=True)
-    trim_webbpsf_filter("F380M", plot=True)
-    trim_webbpsf_filter("F480M", plot=True)
-    trim_webbpsf_filter("F430M", plot=True)
-    ax = plt.axes()
-    plt.setp(ax, xlim=(1.9, 5.1), ylim=(-4.9, 0.1))
-    plt.ylabel("log10 ( Transmission )", fontsize=12)
-    plt.xlabel("wavelength / micron", fontsize=12)
-    plt.title("JWST NIRISS filters in WebbPSF data", fontsize=14)
-    plt.legend(loc="lower left")
-    plt.savefig("JWSTNIRISSfiltercurves.pdf", bbox_inches='tight')
-    #plt.show()
-    
+def get_src_spec(sptype):
+    """
+    Modified from poppy's spectrum_from_spectral_type
+    src: either valid source string (e.g. "A0V") or existing synphot Spectrum object
+    Defaults to A0V spectral type if input string not recognized.
+    Returns:
+        synphot Spectrum object
+    """
+    # check if it's already a synphot spectrum
+    if isinstance(sptype, synphot.spectrum.SourceSpectrum):
+        print('Input is a synphot spectrum')
+        return sptype
+    else:
+        # phoenix model lookup table used in JWST ETCs
+        lookuptable = {
+            "O3V": (45000, 0.0, 4.0),
+            "O5V": (41000, 0.0, 4.5),
+            "O7V": (37000, 0.0, 4.0),
+            "O9V": (33000, 0.0, 4.0),
+            "B0V": (30000, 0.0, 4.0),
+            "B1V": (25000, 0.0, 4.0),
+            "B3V": (19000, 0.0, 4.0),
+            "B5V": (15000, 0.0, 4.0),
+            "B8V": (12000, 0.0, 4.0),
+            "A0V": (9500, 0.0, 4.0),
+            "A1V": (9250, 0.0, 4.0),
+            "A3V": (8250, 0.0, 4.0),
+            "A5V": (8250, 0.0, 4.0),
+            "F0V": (7250, 0.0, 4.0),
+            "F2V": (7000, 0.0, 4.0),
+            "F5V": (6500, 0.0, 4.0),
+            "F8V": (6250, 0.0, 4.5),
+            "G0V": (6000, 0.0, 4.5),
+            "G2V": (5750, 0.0, 4.5),
+            "G5V": (5750, 0.0, 4.5),
+            "G8V": (5500, 0.0, 4.5),
+            "K0V": (5250, 0.0, 4.5),
+            "K2V": (4750, 0.0, 4.5),
+            "K5V": (4250, 0.0, 4.5),
+            "K7V": (4000, 0.0, 4.5),
+            "M0V": (3750, 0.0, 4.5),
+            "M2V": (3500, 0.0, 4.5),
+            "M5V": (3500, 0.0, 5.0),
+            "B0III": (29000, 0.0, 3.5),
+            "B5III": (15000, 0.0, 3.5),
+            "G0III": (5750, 0.0, 3.0),
+            "G5III": (5250, 0.0, 2.5),
+            "K0III": (4750, 0.0, 2.0),
+            "K5III": (4000, 0.0, 1.5),
+            "M0III": (3750, 0.0, 1.5),
+            "O6I": (39000, 0.0, 4.5),
+            "O8I": (34000, 0.0, 4.0),
+            "B0I": (26000, 0.0, 3.0),
+            "B5I": (14000, 0.0, 2.5),
+            "A0I": (9750, 0.0, 2.0),
+            "A5I": (8500, 0.0, 2.0),
+            "F0I": (7750, 0.0, 2.0),
+            "F5I": (7000, 0.0, 1.5),
+            "G0I": (5500, 0.0, 1.5),
+            "G5I": (4750, 0.0, 1.0),
+            "K0I": (4500, 0.0, 1.0),
+            "K5I": (3750, 0.0, 0.5),
+            "M0I": (3750, 0.0, 0.0),
+            "M2I": (3500, 0.0, 0.0)}
+        try:
+            keys = lookuptable[sptype]
+        except KeyError:
+            print(
+                "\n WARNING!!! \n Input spectral type %s did not match any in the catalog. Defaulting to A0V." % sptype)
+            keys = lookuptable["A0V"]
+        try:
+            return grid_to_spec('phoenix', keys[0], keys[1], keys[2])
+        except IOError:
+            errmsg = ("Could not find a match in catalog {0} for key {1}. Check that is a valid name in the " +
+                      "lookup table, and/or that synphot is installed properly.".format(catname, sptype))
+            raise LookupError(errmsg)
+
+def combine_src_filt(bandpass, srcspec, trim=0.01, nlambda=19, verbose=False, plot=False):
+    """
+    Get the observed spectrum through a filter.
+    Largely copied from Poppy instrument.py
+    Define nlambda bins of wavelengths, calculate effstim for each, normalize by effstim total.
+    nlambda should be calculated so there are ~10 wavelengths per resolution element (19 should work)
+    Inputs:
+        bandpass: synphot Spectrum (from get_filt_spec)
+        srcspec: synphot Spectrum (from get_src_spec)
+        trim: if not None, trim bandpass to where throughput greater than trim
+        nlambda: number of wavelengths across filter to return
+    Returns:
+        finalsrc: numpy array of shape (nlambda,2) containing wavelengths, final throughputs
+
+    """
+
+    wl_filt, th_filt = bandpass._get_arrays(bandpass.waveset)
+    # print(len(wl_filt),len(th_filt))
+
+    if trim:
+        if verbose: print("Trimming bandpass to above %.1e throughput" % trim)
+        goodthru = np.where(np.asarray(th_filt) > trim)
+        low_idx, high_idx = goodthru[0][0], goodthru[0][-1]
+        wl_filt, th_filt = wl_filt[low_idx:high_idx], th_filt[low_idx:high_idx]
+        # print(len(wl_filt),len(th_filt))
+    # get effstim for bins of wavelengths
+    # plt.plot(wl_filt,th_filt)
+    minwave, maxwave = wl_filt.min(), wl_filt.max()  # trimmed or not
+    wave_bin_edges = np.linspace(minwave, maxwave, nlambda + 1)
+    wavesteps = (wave_bin_edges[:-1] + wave_bin_edges[1:]) / 2
+    deltawave = wave_bin_edges[1] - wave_bin_edges[0]
+    area = 1 * (u.m * u.m)
+    effstims = []
+    ptsin = len(wl_filt)
+    binfac = ptsin // nlambda
+    if verbose: print("Binning spectrum by %i: from %i points to %i points" % (binfac, ptsin, nlambda))
+    for wave in wavesteps:
+        if verbose:
+            print(f"\t Integrating across band centered at {wave.to(u.micron):.2f} "
+                  f"with width {deltawave.to(u.micron):.2f}")
+        box = synphot.spectrum.SpectralElement(synphot.models.Box1D, amplitude=1, x_0=wave,
+                                               width=deltawave) * bandpass
+
+        binset = np.linspace(wave - deltawave, wave + deltawave,
+                             30)  
+        binset = binset[binset >= 0]  # remove any negative values
+        result = synphot.observation.Observation(srcspec, box, binset=binset).effstim('count', area=area)
+        effstims.append(result)
+
+    effstims = u.Quantity(effstims)
+    effstims /= effstims.sum()  # Normalized count rate is unitless
+    wave_m = wavesteps.to_value(u.m)  # convert to meters
+    effstims = effstims.to_value()  # strip units
+
+    if plot:
+        fig, ax = plt.subplots(figsize=(7, 5))
+        ax.plot(wave_m, effstims)
+        ax.set_xlabel(r"$\lambda$ [m]")
+        ax.set_ylabel("Throughput")
+        ax.set_title("Combined Binned Spectrum (filter and source)")
+        plt.show()
+
+    finalsrc = np.array((effstims,wave_m)).T # this is the order expected by InstrumentData
+
+    return finalsrc
+
+
+def test_spec_comb():
+    """
+    Simple test of filter and source spectra combination with verbosity and
+    plotting for all four NIRISS AMI filters
+    """
+    filters = ["F277W","F380M","F430M","F480M"]
+    srcspec = get_src_spec("A0V")
+    srcspec.plot()
+
+    for filt in filters:
+        band = get_filt_spec(filt)
+        band.plot()
+        final = combine_src_filt(band, srcspec, verbose=True, plot=True)
+
+def get_cw_beta(bandpass):
+    """ 
+    Bandpass: array where the columns are weights, wavelengths
+    Return weighted mean wavelength in meters, fractional bandpass
+    """
+    from scipy.integrate import simps
+    wt = bandpass[:,0]
+    wl = bandpass[:,1]
+    cw = (wl*wt).sum()/wt.sum() # Weighted mean wavelength in meters "central wavelength"
+    area = simps(wt, wl)
+    ew = area / wt.max() # equivalent width
+    beta = ew/cw # fractional bandpass
+    return cw, beta
+
+# -----------------------------------------------------------------
+
     #########################################################################################
     ##################################### from ##############################################
     ################################## gpipoppy2.py #########################################
@@ -1427,7 +1532,7 @@ def amisim2mirage(datadir, amisimfns, mirexample, filt, verbose=False, trim2sub8
         # is sliced to match science array in InstrumentData
         # RAC 9/21
         # already trimmed to N x 80 x 80 if required
-        mirobj['DQ'].data = np.zeros(mirobj[1].data.shape)
+        mirobj['DQ'].data = np.zeros(mirobj[1].data.shape, dtype=np.uint32)
 
         # Transfer non-conflicting keywords from sim data to mirage file header
         mirkeys = list(mirobj[0].header.keys())

@@ -925,7 +925,8 @@ def calibrate_oifits(oif_t, oif_c, oifn=None, oifdir=None, **kwargs):
         oifn (str): calibrated oifits output name
         oifdir (str): Directory to write the oifits file in (default cwd)
     Returns:
-        calibrated (dict): dict containing calibrated OIFITS information
+        calibrated (dict): dict containing calibrated OIFITS information,
+        calibrated oifits filename
     """
     # housekeeping:
     # construct an output filename from the input names if none is provided
@@ -933,6 +934,11 @@ def calibrate_oifits(oif_t, oif_c, oifn=None, oifdir=None, **kwargs):
         bn_t = os.path.basename(oif_t).split('.oifits')[0]
         bn_c = os.path.basename(oif_c).split('.oifits')[0]
         oifn = bn_t + '_cal_' + bn_c + '.oifits'
+
+    rfn = False # anand 2022.01.13 return calib dict as before
+    if 'returnfilename' in kwargs: # anand 2022.01.13
+        rfn = True # return tuple of calib dictionary as well as oif calibrated filename
+
     # backwards compatibility with old kwargs:
     if 'oifprefix' in kwargs:
         oifn = kwargs['oifprefix']+oifn # use the prefix + fn constructed from input
@@ -955,7 +961,9 @@ def calibrate_oifits(oif_t, oif_c, oifn=None, oifdir=None, **kwargs):
 
     oifits.save(calibrated, filename=oifn, datadir=oifdir)
     print('\n in oifits directory {0:s}'.format(oifdir))
-    return calibrated
+
+    if rfn: return calibrated, os.path.join(oifdir, oifn)
+    else: return calibrated
 
 def frame_select(calintsfn, nsigma=1, save_mtfs=True):
     """

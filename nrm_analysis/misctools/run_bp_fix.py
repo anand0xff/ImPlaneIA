@@ -11,6 +11,7 @@ matplotlib.rcParams.update({'font.size': 14})
 import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
+
 from scipy import stats
 
 import argparse
@@ -50,6 +51,7 @@ WL_OVERSIZEFACTOR = 0.1  # increase filter wl support by this amount to 'oversiz
 
 pix_arcsec = 0.0656  # nominal isotropic pixel scale - refine later
 pix_rad = pix_arcsec * np.pi / (60 * 60 * 180)
+
 # for now, mask FITS file in ImPlaneIA. Use webbpsf mask file instead (same file)?
 scriptdir = __file__
 pupilfile_nrm = os.path.join(os.path.dirname(os.path.abspath(__file__)),"MASK_NRM.fits")
@@ -89,7 +91,6 @@ def calcsupport(filtername, sqfov_npix, pupil="NRM"):
     """
     wls = create_wavelengths(filtername)
     print(f"      {filtername}: {wls[0] / micron:.3f} to {wls[2] / micron:.3f} micron")
-    print('FOV',sqfov_npix)
     detimage = np.zeros((sqfov_npix, sqfov_npix), float)
     for wl in wls:
         psf = calcpsf(wl, sqfov_npix, pupil=pupil)
@@ -120,8 +121,6 @@ def calcpsf(wl, fovnpix, pupil="NRM"):
 
     return image_intensity
 
-# =============================================================================
-#
 # =============================================================================
 # additional functions to add flags to DQ array to "fix" charge migration around PSF core,
 # maintaining sum of count rates in region
@@ -172,6 +171,7 @@ def remove_core_flags():
     """
     Remove additonal DQ flags added in the first
     """
+    #TBC
 
 # =============================================================================
 # CODE FROM JENS FOLLOWS
@@ -278,6 +278,7 @@ def fix_bad_pixels(indir,
         # code from Rachel:
         # only correct pixels marked DO_NOT_USE in the DQ array
         # modified by Jens to also correct JUMP_DET pixels
+
         ## Sometimes there is a patch of NaN pixels that causes this code to fail.
         # First replace them with pixel values from neighboring integration, then
         # add DO_NOT_USE flags to positions in DQ array so they will be corrected.
@@ -291,6 +292,7 @@ def fix_bad_pixels(indir,
                     data[idx[0],idx[1],idx[2]] = data[idx[0]+1,idx[1],idx[2]]
 
                 pxdq0[idx[0],idx[1],idx[2]] += 1 # add DNU flag to each nan pixel
+
         totpix = imsz[0] * imsz[1] * imsz[2]
         nrefpix = nrefrow*imsz[1]*imsz[0] # 4-pixel-wide stripe on each frame
         nflagged_all = np.count_nonzero(pxdq0) - nrefpix
@@ -323,10 +325,9 @@ def fix_bad_pixels(indir,
         for j in range(imsz[0]):
             ww_max += [np.unravel_index(np.argmax(median_filter(data[j], size=3)), data[j].shape)] # JK: added median filter to catch PSF center despite hot pixels
         ww_max = np.array(ww_max)
-        xh = min(imsz[1] - stats.mode(ww_max[:, 0]).mode, stats.mode(ww_max[:, 0]).mode - 4) # the bottom 4 rows are reference pixels
+        xh = min(imsz[1] - stats.mode(ww_max[:, 0]).mode, stats.mode(ww_max[:, 0]).mode - nrefrow) # the bottom 4 rows are reference pixels
         yh = min(imsz[2] - stats.mode(ww_max[:, 1]).mode, stats.mode(ww_max[:, 1]).mode - 0)
         sh = int(min(xh, yh))
-        print('type',type(sh))
         print('      Cropping all frames to %.0fx%.0f pixels' % (2 * sh, 2 * sh))
 
         # Compute field-of-view and Fourier sampling.
@@ -354,6 +355,7 @@ def fix_bad_pixels(indir,
         # if (np.sum(pmas) < np.mean(flagged_per_int)):
         #     print('   SKIPPING: subframe too small to estimate noise')
         #     continue
+
 
         # Go through all frames.
         for j in range(imsz[0]):

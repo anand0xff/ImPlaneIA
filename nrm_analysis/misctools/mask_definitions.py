@@ -4,8 +4,6 @@ import numpy as np
 import math
 import sys
 import time
-#import webbpsf.poppy as poppy
-import poppy
 from nrm_analysis.misctools.utils import makedisk, rotate2dccw
 from astropy.io import fits
 from copy import copy

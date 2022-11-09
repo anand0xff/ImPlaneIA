@@ -12,9 +12,9 @@ import matplotlib.pyplot as pl
 import scipy.special
 #import unittest
 
-from astropy import units as u
-from astropy.units import cds
-cds.enable()
+# from astropy import units as u
+# from astropy.units import cds
+# cds.enable() # this removes default astropy units and breaks things
 
 
 VERBOSE = False

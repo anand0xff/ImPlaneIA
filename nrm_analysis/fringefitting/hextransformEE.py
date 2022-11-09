@@ -4,8 +4,8 @@ from astropy.io import fits
 import os
 import matplotlib.pyplot as pl
 from astropy import units as u
-from astropy.units import cds
-cds.enable()
+# from astropy.units import cds
+# cds.enable()
 #>>> distance = 42.0 * u.meter; then: dfloat = distance.value
 #>>> x = 1.0 * u.parsec
 #>>> x.to(u.km)  
