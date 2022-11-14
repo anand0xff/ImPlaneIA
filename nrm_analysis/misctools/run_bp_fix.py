@@ -12,6 +12,8 @@ import astropy.io.fits as pyfits
 import matplotlib.pyplot as plt
 import numpy as np
 
+from scipy import stats
+
 import argparse
 import glob
 import os
@@ -49,13 +51,16 @@ WL_OVERSIZEFACTOR = 0.1  # increase filter wl support by this amount to 'oversiz
 
 pix_arcsec = 0.0656  # nominal isotropic pixel scale - refine later
 pix_rad = pix_arcsec * np.pi / (60 * 60 * 180)
-pupilfile_nrm = "MASK_NRM.fits"
-pupilfile_clearp = "MASK_CLEARP.fits"
+
+# for now, mask FITS file in ImPlaneIA. Use webbpsf mask file instead (same file)?
+scriptdir = __file__
+pupilfile_nrm = os.path.join(os.path.dirname(os.path.abspath(__file__)),"MASK_NRM.fits")
+#pupilfile_clearp = os.path.join(os.path.dirname(os.path.abspath(__file__)),"MASK_CLEARP.fits")
 nrm_pupil = pyfits.getdata(pupilfile_nrm)
-clearp_pupil = pyfits.getdata(pupilfile_clearp)
+#clearp_pupil = pyfits.getdata(pupilfile_clearp)
 pupil_masks = {
     "NRM": nrm_pupil,
-    "CLEARP": clearp_pupil,
+#    "CLEARP": clearp_pupil,
 }
 
 DIAM = 6.559348  # / Flat-to-flat distance across pupil in V3 axis
@@ -86,7 +91,6 @@ def calcsupport(filtername, sqfov_npix, pupil="NRM"):
     """
     wls = create_wavelengths(filtername)
     print(f"      {filtername}: {wls[0] / micron:.3f} to {wls[2] / micron:.3f} micron")
-
     detimage = np.zeros((sqfov_npix, sqfov_npix), float)
     for wl in wls:
         psf = calcpsf(wl, sqfov_npix, pupil=pupil)
@@ -116,6 +120,58 @@ def calcpsf(wl, fovnpix, pupil="NRM"):
     image_intensity = (image_field * image_field.conj()).real
 
     return image_intensity
+
+# =============================================================================
+# additional functions to add flags to DQ array to "fix" charge migration around PSF core,
+# maintaining sum of count rates in region
+
+def add_core_flags(calfile, boxsize=5):
+    with fits.open(calfile) as hdu:
+        data = hdu['SCI'].data
+        dq = hdu['DQ'].data
+        bright = np.where(data == data.max())
+        ypeak, xpeak = bright[1][0], bright[0][0]
+        halfsize = boxsize//2
+        xlow,xhigh = xpeak-halfsize,xpeak+halfsize+1
+        ylow,yhigh = ypeak-halfsize,ypeak+halfsize+1
+        # update DQ array with DNU flags in box around peak
+        hdu['DQ'].data[xlow:xhigh,ylow:yhigh] += 1
+        outname = calfile.replace('.fits','_dqflagged.fits')
+        hdu.writeto(outname, overwrite=True)
+    print('new FITS file saved to', outname)
+    return outname
+
+
+def conserve_flux(uncorrfn, corrfn, boxsize=5):
+    uncorrdata = fits.getdata(uncorrfn)
+    corrdata = fits.getdata(corrfn)
+    # assume bright loc the same in both files 
+    # (it should be unless something is horribly wrong)
+    # define the box to fix
+    bright = np.where(uncorrdata == uncorrdata.max())
+    ypeak, xpeak = bright[1][0], bright[0][0]
+    halfsize = boxsize//2
+    xlow,xhigh = xpeak-halfsize,xpeak+halfsize+1
+    ylow,yhigh = ypeak-halfsize,ypeak+halfsize+1
+    pxsum_uncorr = np.sum(uncorrdata[xlow:xhigh,ylow:yhigh])
+    pxsum_corr = np.sum(corrdata[xlow:xhigh,ylow:yhigh])
+    sumratio = pxsum_uncorr/pxsum_corr
+    print('uncorrected/corrected ratio of countrate in %ix%i box: %f' % (boxsize,boxsize, sumratio))
+    # open the corrected file to scale this box
+    with fits.open(corrfn) as hdu:
+        data = hdu['SCI'].data
+        scaled = data[xlow:xhigh,ylow:yhigh] * sumratio
+        hdu['SCI'].data[xlow:xhigh,ylow:yhigh] = scaled
+        outname = corrfn.replace('.fits','_scaled.fits')
+        hdu.writeto(outname,overwrite=True)
+    print('new FITS file saved to', outname)
+    return outname
+
+def remove_core_flags():
+    """
+    Remove additonal DQ flags added in the first
+    """
+    #TBC
 
 # =============================================================================
 # CODE FROM JENS FOLLOWS
@@ -222,6 +278,21 @@ def fix_bad_pixels(indir,
         # code from Rachel:
         # only correct pixels marked DO_NOT_USE in the DQ array
         # modified by Jens to also correct JUMP_DET pixels
+
+        ## Sometimes there is a patch of NaN pixels that causes this code to fail.
+        # First replace them with pixel values from neighboring integration, then
+        # add DO_NOT_USE flags to positions in DQ array so they will be corrected.
+        nanidxlist = np.argwhere(np.isnan(data))
+        if len(nanidxlist) > 1:
+            print("Identified %i NaN pixels to correct" % len(nanidxlist))
+            for idx in nanidxlist:
+                try:
+                    data[idx[0],idx[1],idx[2]] = data[idx[0]-1,idx[1],idx[2]]
+                except IndexError:
+                    data[idx[0],idx[1],idx[2]] = data[idx[0]+1,idx[1],idx[2]]
+
+                pxdq0[idx[0],idx[1],idx[2]] += 1 # add DNU flag to each nan pixel
+
         totpix = imsz[0] * imsz[1] * imsz[2]
         nrefpix = nrefrow*imsz[1]*imsz[0] # 4-pixel-wide stripe on each frame
         nflagged_all = np.count_nonzero(pxdq0) - nrefpix
@@ -254,9 +325,9 @@ def fix_bad_pixels(indir,
         for j in range(imsz[0]):
             ww_max += [np.unravel_index(np.argmax(median_filter(data[j], size=3)), data[j].shape)] # JK: added median filter to catch PSF center despite hot pixels
         ww_max = np.array(ww_max)
-        xh = min(imsz[1] - np.max(ww_max[:, 0]), np.min(ww_max[:, 0]) - nrefrow)  # the bottom 4 rows are reference pixels
-        yh = min(imsz[2] - np.max(ww_max[:, 1]), np.min(ww_max[:, 1]) - 0)
-        sh = min(xh, yh)
+        xh = min(imsz[1] - stats.mode(ww_max[:, 0]).mode, stats.mode(ww_max[:, 0]).mode - nrefrow) # the bottom 4 rows are reference pixels
+        yh = min(imsz[2] - stats.mode(ww_max[:, 1]).mode, stats.mode(ww_max[:, 1]).mode - 0)
+        sh = int(min(xh, yh))
         print('      Cropping all frames to %.0fx%.0f pixels' % (2 * sh, 2 * sh))
 
         # Compute field-of-view and Fourier sampling.
@@ -281,9 +352,10 @@ def fix_bad_pixels(indir,
             pmas = dist > 9. * filtwl_d[filt] / diam * 180. / np.pi * 1000. * 3600. / pxsc
         else:
             pmas = dist > 12. * filtwl_d[filt] / diam * 180. / np.pi * 1000. * 3600. / pxsc
-        if (np.sum(pmas) < np.mean(flagged_per_int)):
-            print('   SKIPPING: subframe too small to estimate noise')
-            continue
+        # if (np.sum(pmas) < np.mean(flagged_per_int)):
+        #     print('   SKIPPING: subframe too small to estimate noise')
+        #     continue
+
 
         # Go through all frames.
         for j in range(imsz[0]):
