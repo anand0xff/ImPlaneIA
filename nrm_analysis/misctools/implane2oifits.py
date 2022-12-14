@@ -1046,8 +1046,7 @@ def clip_oifits(oifitsfn, good_indices, method='med', suffix=''):
                 if datacol == 'VIS2':
                     datacol = 'VIS2DATA'
                 arr = outdict_multi[extname][datacol]
-                #z now this is a sample of a population, so standard error of the mean...?
-                outarr = np.std(arr, axis=1)/np.sqrt(arr.shape[1])
+                outarr = np.std(arr, axis=1)
             else:
                 arr = outdict_multi[extname][colname]
                 if method=='med':
