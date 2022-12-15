@@ -9,18 +9,6 @@ from astropy import units as u
 
 
 import sys
-# sys.path.insert(0, os.path.join(os.path.dirname(__file__),'../'))
-# sys.path.insert(0, os.path.join(os.path.dirname(__file__),'../../'))
-
-
-# print(sys.path)
-
-try:
-    # from .. import oifits
-    import oifits
-    print('oifits successfully imported')
-except ImportError:
-    raise ImportError('Module oifits not found. Please include it in your path')
 
 from nrm_analysis import nrm_core, InstrumentData
 

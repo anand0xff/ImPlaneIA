@@ -15,6 +15,7 @@ import numpy as np
 import scipy.special
 #import math
 import nrm_analysis.misctools.utils as utils
+import nrm_analysis.misctools.mask_definitions as mask_definitions
 import sys, os
 import time
 from astropy.io import fits
@@ -79,7 +80,7 @@ mas = 1.0e-3 / (60*60*180/np.pi) # in radians
 
 class NRM_Model():
 
-    def __init__(self, mask=None, holeshape="circ", pixscale=None,
+    def __init__(self, mask=None, v3_yang=0.0, holeshape="circ", pixscale=None,
             over = 1, log=_default_log, pixweight=None,
             datapath="",
             phi=None, refdir="",
@@ -113,81 +114,22 @@ class NRM_Model():
         self.maskname = mask  # should change to "mask", and mask.maskname is then eg jwst_g7s6c or whatever 2021 feb anand
         # Cos incoming 'mask' is str, this is a mask object.
         #elf.mask = mask  # should change to "mask", and mask.maskname is then eg jwst_g7s6c or whatever 2021 feb anand
-        self.pixweight = pixweight 
+        self.pixweight = pixweight
 
-        # WARNING! JWST CHOOSEHOLES CODE NOW DUPLICATED IN mask_definitions.py WARNING! ###
-        holedict = {} # as_built names, C2 open, C5 closed, but as designed coordinates
-        # Assemble holes by actual open segment names.  Either the full mask or the
-        # subset-of-holes mask will be V2-reversed after the as_designed ceenters 
-        # are installed in the object.
-        allholes = ('b4','c2','b5','b2','c1','b6','c6')
-        b4,c2,b5,b2,c1,b6,c6 = ('b4','c2','b5','b2','c1','b6','c6')
-        holedict['b4'] = [ 0.00000000,  -2.640000]       #B4 -> B4
-        holedict['c2'] = [-2.2863100 ,  0.0000000]       #C5 -> C2
-        holedict['b5'] = [ 2.2863100 , -1.3200001]       #B3 -> B5
-        holedict['b2'] = [-2.2863100 ,  1.3200001]       #B6 -> B2
-        holedict['c1'] = [-1.1431500 ,  1.9800000]       #C6 -> C1
-        holedict['b6'] = [ 2.2863100 ,  1.3200001]       #B2 -> B6
-        holedict['c6'] = [ 1.1431500 ,  1.9800000]       #C1 -> C6
-        if mask=='jwst':
-            # as designed MB coordinates (Mathilde Beaulieu, Peter, Anand).
-            # as designed: segments C5 open, C2 closed, meters V2V3 per Paul Lightsey def
-            # as built C5 closed, C2 open
-            #
-            # undistorted pupil coords on PM.  These numbers are considered immutable.  
-            # as designed seg -> as built seg in comments each ctr entry (no distortion)
-            if chooseholes is not False: #holes B4 B5 C6 asbuilt for orientation testing
-                holelist = []
-                for h in allholes:
-                    if h in chooseholes: 
-                        holelist.append(holedict[h])
-                self.ctrs_asdesigned = np.array( holelist )
-            else:
-                # the REAL THING - as_designed 7 hole, m in PM space, no distortion  shape (7,2)
-                self.ctrs_asdesigned = np.array( [ 
-                        [ 0.00000000,  -2.640000],       #B4 -> B4  as-designed -> as-built mapping
-                        [-2.2863100 ,  0.0000000],       #C5 -> C2
-                        [ 2.2863100 , -1.3200001],       #B3 -> B5
-                        [-2.2863100 ,  1.3200001],       #B6 -> B2
-                        [-1.1431500 ,  1.9800000],       #C6 -> C1
-                        [ 2.2863100 ,  1.3200001],       #B2 -> B6
-                        [ 1.1431500 ,  1.9800000]    ] ) #C1 -> C6
-            #self.d = 0.80 * m
-            self.d = 0.82 * m
-            self.vprint(self, "hex hole flat_to_dflat distance in LG_Model() is {:0.2f}".format(self.d))
-            self.D = 6.5 * m
 
-        else:
+        if mask is None:
+            print("LG_Model.__init__: No mask name specified for model, using jwst_g7s6c")
+            mask = mask_definitions.NRM_mask_definitions(maskname="jwst_g7s6c", 
+                                    chooseholes=chooseholes, 
+                                    holeshape="hex")
+        elif isinstance(mask, str):
+            mask = mask_definitions.NRM_mask_definitions(maskname=mask, 
+                                    chooseholes=chooseholes, 
+                                    holeshape="hex")
+        self.ctrs = mask.ctrs
+        self.d = mask.hdia
+        self.D = mask.activeD
 
-            try:
-                #print(mask.ctrs)
-                pass
-                
-            except AttributeError:
-                raise AttributeError("Mask must be either 'jwst' or NRM_mask_geometry object")
-
-            self.ctrs, self.d, self.D = np.array(mask.ctrs), mask.hdia, mask.activeD
-
-        if mask=='jwst':
-            """
-            Preserve ctrs.as_designed (treat as immutable)
-            Reverse V2 axis coordinates to close C5 open C2, and others follow suit... 
-            Preserve ctrs.as_built  (treat as immutable)
-            """
-            self.ctrs_asbuilt = self.ctrs_asdesigned.copy()
-
-            # create 'live' hole centers in an ideal, orthogonal undistorted xy pupil space,
-            # eg maps open hole C5 in as_designed to C2 as_built, eg C4 unaffacted....
-            self.ctrs_asbuilt[:,0] *= -1
-
-            # LG++ rotate hole centers by 90 deg to match MAST o/p DMS PSF with 
-            # no affine2d transformations 8/2018 AS
-            # LG++ The above aligns the hole patern with the hex analytic FT, 
-            # flat top & bottom as seen in DMS data. 8/2018 AS
-            self.ctrs_asbuilt = utils.rotate2dccw(self.ctrs_asbuilt, np.pi/2.0) # overwrites attributes
-
-            # create 'live' hole centers in an ideal, orthogonal undistorted xy pupil space,
-            self.ctrs = self.ctrs_asbuilt.copy()
 
 
         self.N = len(self.ctrs)
@@ -416,10 +358,10 @@ class NRM_Model():
 
 
     def fit_image(self, image, reference=None, pixguess=None, rotguess=0, psf_offset=(0,0),
-                  modelin=None, savepsfs=False, bpd=None):
+                  modelin=None, savepsfs=False, dqm=None, weighted=False):
         """
         This works on 2D "centered" images fed to it.
-        bpd is optional 2D bad pixel array, same size as image.  Zero is OK pixel.
+        dqm is optional 2D bad pixel bool array, same size as image.  
         self.maskname is a maskdef object with property self.maskname.mask a string
         2021
         """
@@ -442,8 +384,8 @@ class NRM_Model():
         recommended that the symmetric part of the data be used to avoid piston
         confusion in scaling. Good luck!
         """
-        self.model_in=modelin
-        self.weighted="unused"
+        self.model_in = modelin
+        self.weighted = weighted
         self.saveval = savepsfs
 
         if modelin is None:
@@ -486,8 +428,20 @@ class NRM_Model():
             self.vprint(self, "    **** LG_Model.NRM_Model.fit_image: fittingmodel=modelin")
             self.fittingmodel = modelin
             
-        self.soln, self.residual, self.cond,self.linfit_result = \
-                leastsqnrm.matrix_operations(image, self.fittingmodel, verbose=False, bpd=bpd)
+        # working code 2022 next line...
+        #self.soln, self.residual, self.cond,self.linfit_result = \
+        #        leastsqnrm.matrix_operations(image, self.fittingmodel, verbose=False, dqm=dqm)
+
+        #######################################################33  very old snippet below
+        #######################################################33  very old snippet below
+        if self.weighted is False:
+            self.soln, self.residual, self.cond, self.linfit_result = \
+                leastsqnrm.matrix_operations(image, self.fittingmodel, verbose=False, dqm=dqm)
+        else:
+            self.soln, self.residual, self.cond, self.singvals = leastsqnrm.weighted_operations(image, \
+                                        self.fittingmodel, verbose=False, dqm=dqm)
+        #######################################################33  inew code line above
+
 
         self.vprint(self, "NRM_Model Raw Soln:")
         self.vprint(self, self.soln)
