@@ -894,14 +894,6 @@ def calib_dicts(dct_t, dct_c):
     sqverr_t = dct_c['OI_VIS2']['VIS2ERR']
     vaerr_t = dct_t['OI_VIS']['VISAMPERR']
     vaerr_c = dct_c['OI_VIS']['VISAMPERR']
-    # include pistons and piston errors from target and calibrator
-    pistons_t = dct_t['OI_ARRAY']['PISTONS']
-    pisterr_t = dct_t['OI_ARRAY']['PIST_ERR']
-    pistons_c = dct_c['OI_ARRAY']['PISTONS']
-    pisterr_c = dct_c['OI_ARRAY']['PIST_ERR']
-    # sum in quadrature errors from target and calibrator pistons
-    pisterr_out = np.sqrt(pisterr_t**2 + pisterr_c**2)
-
     cperr_out = np.sqrt(cperr_t**2. + cperr_c**2.)
     sqverr_out = sqv_out * np.sqrt((sqverr_t/dct_t['OI_VIS2']['VIS2DATA'])**2. + (sqverr_c/dct_c['OI_VIS2']['VIS2DATA'])**2.)
     vaerr_out = va_out * np.sqrt((vaerr_t/dct_t['OI_VIS']['VISAMP'])**2. + (vaerr_c/dct_c['OI_VIS']['VISAMP'])**2.)
@@ -916,13 +908,22 @@ def calib_dicts(dct_t, dct_c):
     calib_dict['OI_VIS']['VISAMPERR'] = vaerr_out
     # preserve the name of the calibrator star
     calib_dict['info']['CALIB'] = dct_c['info']['OBJECT']
-    # target and calibrator pistons
+    # include pistons and piston errors from target and calibrator
+    # if old files, raw oifits won't have any pistons
+    if ('PISTONS' in dct_t['OI_ARRAY']) & ('PISTONS' in dct_c['OI_ARRAY']):
+        pistons_t = dct_t['OI_ARRAY']['PISTONS']
+        pisterr_t = dct_t['OI_ARRAY']['PIST_ERR']
+        pistons_c = dct_c['OI_ARRAY']['PISTONS']
+        pisterr_c = dct_c['OI_ARRAY']['PIST_ERR']
+        # sum in quadrature errors from target and calibrator pistons (only if both oifits contain pistons)
+        pisterr_out = np.sqrt(pisterr_t**2 + pisterr_c**2)
+        # populate calibrated dict with pistons 
+        calib_dict['OI_ARRAY']['PISTON_T'] = pistons_t
+        calib_dict['OI_ARRAY']['PISTON_C'] = pistons_c
+        calib_dict['OI_ARRAY']['PIST_ERR'] = pisterr_out
     # remove plain "pistons" key from dict
     if 'PISTONS' in calib_dict['OI_ARRAY']:
         del calib_dict['OI_ARRAY']['PISTONS']
-    calib_dict['OI_ARRAY']['PISTON_T'] = pistons_t
-    calib_dict['OI_ARRAY']['PISTON_C'] = pistons_c
-    calib_dict['OI_ARRAY']['PIST_ERR'] = pisterr_out
 
     return calib_dict
 

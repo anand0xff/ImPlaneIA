@@ -271,12 +271,17 @@ def save(dic, filename=None, datadir=None, verbose=False):
         piston_c = dic['OI_ARRAY']['PISTON_C']
         pist_err = dic['OI_ARRAY']['PIST_ERR']
     except KeyError:
-        try:
-            pistons = dic['OI_ARRAY']['PISTONS']
-            pist_err = dic['OI_ARRAY']['PIST_ERR']
-        except KeyError:
-            pistons = dic['info']['PISTONS']
-            pist_err = dic['info']['PIST_ERR']
+        pass
+    try:
+        pistons = dic['OI_ARRAY']['PISTONS']
+        pist_err = dic['OI_ARRAY']['PIST_ERR']
+    except KeyError:
+        pass
+    try:
+        pistons = dic['info']['PISTONS']
+        pist_err = dic['info']['PIST_ERR']
+    except KeyError:
+        pass
 
 
     N_ap = len(staxy)
@@ -299,16 +304,10 @@ def save(dic, filename=None, datadir=None, verbose=False):
     isz = dic['info']['ISZ']  # Size of the image to extract NRM data
     fov = [pscale * isz] * N_ap
     fovtype = ['RADIUS'] * N_ap
-    try:
-        if len(pistons.shape) == 1: # figure out if it's multi-slice or not
-            nslice = 1
-        else:
-            nslice = pistons.shape[1] # this would cause an error if not multi-slice
-    except:
-        if len(piston_t.shape) == 1:
-            nslice = 1
-        else:
-            nslice = piston_t.shape[1]
+    if len(dic['OI_VIS']['VISAMP'].shape) == 1: # figure out if it's multi-slice or not
+        nslice = 1
+    else:
+        nslice = dic['OI_VIS']['VISAMP'].shape[1] # this would cause an error if not multi-slice
 
     col1 = fits.Column(name='TEL_NAME', format='16A', array=tel_name)
     col2 = fits.Column(name='STA_NAME', format='16A', array=sta_name)
@@ -323,14 +322,22 @@ def save(dic, filename=None, datadir=None, verbose=False):
         col9 = fits.Column(name='PISTONS', unit='DEGREES', format='%dD'%nslice, array=pistons) # RAC 2021
         col10= fits.Column(name='PIST_ERR', unit='DEGREES', format='%dD'%nslice, array=pist_err)
     except NameError:
-        col9 = fits.Column(name='PISTON_T', unit='DEGREES', format='%dD' % nslice, array=piston_t)
-        col10 = fits.Column(name='PISTON_C', unit='DEGREES', format='%dD' % nslice, array=piston_c)
-        col11 = fits.Column(name='PIST_ERR', unit='DEGREES', format='%dD' % nslice, array=pist_err)
+        try:
+            col9 = fits.Column(name='PISTON_T', unit='DEGREES', format='%dD' % nslice, array=piston_t)
+            col10 = fits.Column(name='PISTON_C', unit='DEGREES', format='%dD' % nslice, array=piston_c)
+            col11 = fits.Column(name='PIST_ERR', unit='DEGREES', format='%dD' % nslice, array=pist_err)
+        except:
+            pass # if no pistons in oifits file
+    
     try:
         # if col11 is defined it has targ and cal pistons
         coldefs = fits.ColDefs([col1, col2, col3, col4, col5, col6, col7, col8, col9, col10, col11])
     except NameError:
-        coldefs = fits.ColDefs([col1, col2, col3, col4, col5, col6, col7, col8, col9, col10])
+        try:
+            coldefs = fits.ColDefs([col1, col2, col3, col4, col5, col6, col7, col8, col9, col10])
+        except:
+            coldefs =  fits.ColDefs([col1, col2, col3, col4, col5, col6, col7, col8])
+            pass
     # that was a very gross way to do that
     hdu = fits.BinTableHDU.from_columns(coldefs)
 
@@ -533,17 +540,18 @@ def load(filename, target=None, ins=None, mask=None, include_vis=True):
         fitsHandler = copy.deepcopy(hdulist)
 
         hdr = fitsHandler[0].header
-
         dic = {}
         dic['info'] = {}
+        kwd_list = ['OBJECT','FILT','DATE-OBS','TELESCOP','OBSERVER','INSMODE','PA']
+        for kwd in kwd_list:
+            try:
+                dic['info'][kwd] = hdr[kwd]
+            except KeyError:
+                dic['info'][kwd] = None
         try:
             dic['info']['TARGET'] = hdr['OBJECT']
         except KeyError:
             dic['info']['TARGET'] = target
-        try:
-            dic['info']['OBJECT'] = hdr['OBJECT']
-        except KeyError:
-            dic['info']['OBJECT'] = None
         try:
             dic['info']['INSTRUME'] = hdr['INSTRUME']
         except KeyError:
@@ -552,30 +560,6 @@ def load(filename, target=None, ins=None, mask=None, include_vis=True):
             dic['info']['MASK'] = hdr['MASK']
         except KeyError:
             dic['info']['MASK'] = mask
-        try:
-            dic['info']['FILT'] = hdr['FILT']
-        except KeyError:
-            dic['info']['FILT'] = None
-        try:
-            dic['info']['DATE-OBS'] = hdr['DATE-OBS']
-        except KeyError:
-            dic['info']['DATE-OBS'] = None
-        try:
-            dic['info']['TELESCOP'] = hdr['TELESCOP']
-        except KeyError:
-            dic['info']['TELESCOP'] = None  # try to get it from somewhere else?
-        try:
-            dic['info']['OBSERVER'] = hdr['OBSERVER']
-        except KeyError:
-            dic['info']['OBSERVER'] = None
-        try:
-            dic['info']['INSMODE'] = hdr['INSMODE']
-        except KeyError:
-            dic['info']['INSMODE'] = None
-        try:
-            dic['info']['PA'] = hdr['PA']
-        except KeyError:
-            dic['info']['PA'] = None
 
         for hdu in fitsHandler[1:]:
             # RAC 9/2020
@@ -584,11 +568,11 @@ def load(filename, target=None, ins=None, mask=None, include_vis=True):
                 try:
                     dic['info']['PSCALE'] = hdu.header['PSCALE']
                 except KeyError:
-                    continue
+                    pass
                 try:
                     dic['info']['ISZ'] = hdu.header['ISZ']
                 except KeyError:
-                    continue
+                    pass
 
                 # make staxy from staxyz array (remove last column)
                 staxyz = hdu.data['STAXYZ']
@@ -596,9 +580,13 @@ def load(filename, target=None, ins=None, mask=None, include_vis=True):
                 dic['OI_ARRAY'] = {'STAXYZ': staxyz,
                                    'STAXY': staxy,
                                    'CTRS_EQT': hdu.data['CTRS_EQT'],
-                                   'PISTONS': hdu.data['PISTONS'],
-                                   'PIST_ERR': hdu.data['PIST_ERR']
                                    }
+                # raw oifits contain PISTONS, PIST_ERR.
+                # calibrated oifits contain PISTON_T, PISTON_C, PIST_ERR
+                piston_keys = ['PISTONS', 'PISTON_T', 'PISTON_C', 'PIST_ERR']
+                for pkey in piston_keys:
+                    if pkey in hdu.data.columns.names:
+                        dic['OI_ARRAY'][pkey] = hdu.data[pkey]
 
             if hdu.header['EXTNAME'] == 'OI_WAVELENGTH':
                 dic['OI_WAVELENGTH'] = {'EFF_WAVE': hdu.data['EFF_WAVE'],
@@ -742,11 +730,11 @@ def show(inputList, diffWl=False, vmin=0, vmax=1.05, cmax=180, setlog=False,
         V = tmp[1]
         band = tmp[10]
         wl = tmp[9]
-        label = '%2.2f $\mu m$ (%s)' % (wl, band)
+        label = r'%2.2f $\mu m$ (%s)' % (wl, band)
         if diffWl:
             c1, c2 = dic_color[band], dic_color[band]
             if band not in l_band_al:
-                label = '%2.2f $\mu m$ (%s)' % (wl*1e6, band)
+                label = r'%2.2f $\mu m$ (%s)' % (wl*1e6, band)
         else:
             c1, c2 = '#00adb5', '#fc5185'
         l_bmax.append(tmp[2])
