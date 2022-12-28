@@ -16,10 +16,10 @@ import copy
 # Module imports
 import synphot
 # import stsynphot
-# mask geometries, GPI, NIRISS, VISIR supported...
 from nrm_analysis.misctools.mask_definitions import NRM_mask_definitions 
 from nrm_analysis.misctools import utils
 from nrm_analysis.misctools import lpl_ianc
+import pysiaf
 
 
 
@@ -272,6 +272,10 @@ class NIRISS:
             scihdr=fitsfile[1].header
             # MAST header or similar kwds info for oifits writer:
             self.updatewithheaderinfo(prihdr, scihdr)
+            # Print target location, size for cropping only once
+            sh = min((scidata.shape[1]-self.peak0),(scidata.shape[2]-self.peak1))
+            print("InstrumentData.NIRISS.read_data: Target pixel location: (%i,%i)" % (self.peak0,self.peak1))
+            print("InstrumentData.NIRISS.read_data: All slices will be cropped to %.0fx%.0f pixels" % (2*sh-1, 2*sh-1))
 
             # Directory name into which to write txt observables & optional fits diagnostic files
             # The input fits image or cube of images file rootname is used to create the output
@@ -436,7 +440,15 @@ class NIRISS:
         elif sh["NAXIS"] == 3:
             # each slice is one INTegration or 'ramp'
             self.itime = ph["EFFINTTM"]; info4oif_dict['itime'] = self.itime
-
+        # Get integer-pixel position of target from siaf & header info
+        siaf = pysiaf.Siaf('NIRISS')
+        # select AMI aperture by name
+        xoffset,yoffset = ph['XOFFSET'], ph['YOFFSET']
+        apername = ph['APERNAME']
+        nis_ami = siaf[apername]
+        xtarg_detpx, ytarg_detpx = nis_ami.idl_to_sci(xoffset, yoffset) # decimal pixel position in subarray, 1 indexed?
+        peak1, peak0 =int(np.floor(xtarg_detpx)), int(np.floor(ytarg_detpx))
+        self.peak0, self.peak1 = peak0, peak1
 
         np.set_printoptions(precision=5, suppress=True, linewidth=160, 
                             formatter={'float': lambda x: "%10.5f," % x})
@@ -568,11 +580,11 @@ class NIRISS:
             if vpar == -1:
                 # rotate clockwise  <rotate coords clockwise?>
                 ctrs_rot = utils.rotate2dccw(mask_ctrs, np.deg2rad(-rot_ang))
-                print(f'InstrumentData.mast2sky: Rotating mask hole centers clockwise by {rot_ang:.3f} degrees')
+                print(f'InstrumentData.NIRISS.mast2sky: Rotating mask hole centers clockwise by {rot_ang:.3f} degrees')
             else:
                 # counterclockwise  <rotate coords counterclockwise?>
                 ctrs_rot = utils.rotate2dccw(mask_ctrs, np.deg2rad(rot_ang))
-                print('InstrumentData.mast2sky: Rotating mask hole centers counterclockwise by {rot_ang:.3f} degrees')
+                print('InstrumentData.NIRISS.mast2sky: Rotating mask hole centers counterclockwise by {rot_ang:.3f} degrees')
         else:
             ctrs_rot = mask_ctrs
         return ctrs_rot
