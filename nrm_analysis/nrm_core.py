@@ -343,11 +343,12 @@ def fit_fringes_single_integration(args):
         try: # RAC 2022
             peak0, peak1 = self.instrument_data.peak0, self.instrument_data.peak1
             imsz = self.scidata.shape
-            min((imsz[1]-peak0),(imsz[2]-peak1))
+            sh = min((imsz[1]-peak0),(imsz[2]-peak1))
             r = sh - 1 # half-size for cropping
             self.ctrd = self.scidata[slc,int(peak0-r):int(peak0+r+1), int(peak1-r):int(peak1+r+1)]
             self.dqslice = self.dqmask[slc,int(peak0-r):int(peak0+r+1), int(peak1-r):int(peak1+r+1)]
-        except: # revert to the old way
+        except Exception as err: # revert to the old way
+            print(err)
             self.ctrd, self.dqslice = utils.center_imagepeak(
                                     self.scidata[slc,:,:], 
                                     dqm=self.dqmask[slc,:,:]) 
