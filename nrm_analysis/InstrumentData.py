@@ -232,9 +232,11 @@ class NIRISS:
                 dqmask = bpdata & self.bpval["DO_NOT_USE"] == self.bpval["DO_NOT_USE"] #
                 del bpdata # free memory
 
-                # True => driver wants to omit using pixels with dqflag raised in fit,
+                # True => driver excludes bad pixels when fitting
+                # False => driver uses all pixels when fitting
                 if self.usedq == True:
-                    print('InstrumentData.NIRISS.read_data: will not use flagged DQ pixels in fit')
+                    print('InstrumentData.NIRISS.read_data: will use all pixels in fit')
+                    dqmask = np.zeros(scidata.shape, dtype=np.uint32) # all-zero DQ mask --> use all pixels
             except Exception as e:
                 print('InstrumentData.NIRISS.read_data: raised exception', e)
                 self.bpexist = False
