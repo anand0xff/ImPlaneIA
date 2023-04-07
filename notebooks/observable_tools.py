@@ -102,7 +102,7 @@ class ObservableSet:
                     for q in range(nholes):
                         if i < j and j < k and k < q:
                             qlist.append((i, j, k, q))
-        qarray = np.array(qlist).astype(np.int)
+        qarray = np.array(qlist).astype(int)
         uvwlist = []
         # foreach row of 3 elts...
         for quad in qarray:

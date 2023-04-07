@@ -124,7 +124,7 @@ class ObservablesFromText():
                     for q in range(nholes):
                         if i < j and j < k and k < q:
                             qlist.append((i, j, k, q))
-        qarray = np.array(qlist).astype(np.int)
+        qarray = np.array(qlist).astype(int)
         if self.verbose:
             print("qarray", qarray.shape, "\n", qarray)
         qname = []
@@ -153,7 +153,7 @@ class ObservablesFromText():
                 for k in range(nholes):
                     if i < j and j < k:
                         tlist.append((i, j, k))
-        tarray = np.array(tlist).astype(np.int)
+        tarray = np.array(tlist).astype(int)
         if self.verbose:
             print("tarray", tarray.shape, "\n", tarray)
 
@@ -184,7 +184,7 @@ class ObservablesFromText():
             for j in range(nholes):
                 if i < j:
                     blist.append((i, j))
-        barray = np.array(blist).astype(np.int)
+        barray = np.array(blist).astype(int)
         # blname = []
         bllist = []
         for basepair in blist:
