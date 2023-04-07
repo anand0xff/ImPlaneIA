@@ -7,6 +7,7 @@ from nrm_analysis.misctools import oifits
 from nrm_analysis.misctools import utils
 from astropy.io import ascii
 from astropy.table import Table
+import sys
 
 # ---------------------------------------------------------
 # Class ObservableSet for handling observables stored in OIFITS files
@@ -184,7 +185,7 @@ class ObservableSet:
         else:
             plt.show()
 
-    def plot_observables_allints(self, saveplot=True, odir="./"):
+    def plot_observables_allints(self, saveplot=True, odir="./", sigclip=None):
         """
         Plot closure phases and visibility amplitudes vs. baseline length
         for all integrations of an observable set.
@@ -195,22 +196,29 @@ class ObservableSet:
             all_cps = self.oi.OI_T3.T3PHI
             vis_bl = self.geometry.vis_bl
             all_visamps = self.oi.OI_VIS.VISAMP
+            all_pistons = self.oi.OI_ARRAY.PISTONS
             nints = all_cps.shape[1]
             colormap = plt.cm.gist_ncar
             plt.gca().set_prop_cycle(
                 plt.cycler("color", plt.cm.jet(np.linspace(0, 1, nints)))
             )
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 7))
+            fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(20, 7))
 
             for ii in np.arange(nints):
                 ax1.plot(t3_bl, all_cps[:, ii], ".")
                 ax2.plot(vis_bl, all_visamps[:, ii], ".")
+                ax3.plot(        all_pistons[:, ii], ".")
             ax1.set_xlabel(r"$B_{max}$", size=14)
             ax1.set_ylabel("Closure phase [deg]", size=14)
             ax1.set_title("Closure Phase", size=16)
             ax2.set_title("Visibility Amplitude", size=16)
             ax2.set_xlabel(r"$B_{max}$", size=14)
             ax2.set_ylabel("Visibility Amplitude", size=14)
+
+            ax3.set_title("Segment piston", size=16)
+            ax3.set_xlabel(r"$Hole\ number$", size=14)
+            ax3.set_ylabel("Piston", size=14)
+            ax3.set_ylim(-25,25)
             plt.suptitle(self.fn)
 
             if saveplot:
