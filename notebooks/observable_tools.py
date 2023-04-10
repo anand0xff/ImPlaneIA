@@ -189,36 +189,44 @@ class ObservableSet:
         """
         Plot closure phases and visibility amplitudes vs. baseline length
         for all integrations of an observable set.
-        Integrations different colors (really not useful)
+        Integrations different colors (occasionally handy)
         """
         if self.multi:
-            t3_bl = self.geometry.t3_bl
-            all_cps = self.oi.OI_T3.T3PHI
-            vis_bl = self.geometry.vis_bl
-            all_visamps = self.oi.OI_VIS.VISAMP
+
+            t3_bl, all_cps = (self.geometry.t3_bl, self.oi.OI_T3.T3PHI)
+            vis_bl, all_visamps = (self.geometry.vis_bl, self.oi.OI_VIS.VISAMP)
             all_pistons = self.oi.OI_ARRAY.PISTONS
-            nints = all_cps.shape[1]
+
+            nints = all_cps.shape[1] # number of 'slices' is second dim
+
             colormap = plt.cm.gist_ncar
             plt.gca().set_prop_cycle(
                 plt.cycler("color", plt.cm.jet(np.linspace(0, 1, nints)))
             )
             fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(20, 7))
 
+            ylims1, ylims2, ylims3 = ([], [], [])
             for ii in np.arange(nints):
-                ax1.plot(t3_bl, all_cps[:, ii], ".")
-                ax2.plot(vis_bl, all_visamps[:, ii], ".")
-                ax3.plot(        all_pistons[:, ii], ".")
+                ax1.plot(t3_bl, all_cps[:, ii], "."); ylim1.append(ax1.get_ylim())
+                ax2.plot(vis_bl, all_visamps[:, ii], "."); ylim2.append(ax2.get_ylim())
+                ax3.plot(        all_pistons[:, ii], "."); ylim3.append(ax3.get_ylim())
+
             ax1.set_xlabel(r"$B_{max}$", size=14)
             ax1.set_ylabel("Closure phase [deg]", size=14)
+            ax1.set_ylim(np.min(np.array(ylims1)[0,:]),  np.max(np.array(ylims1)[0,:]))
             ax1.set_title("Closure Phase", size=16)
+
             ax2.set_title("Visibility Amplitude", size=16)
             ax2.set_xlabel(r"$B_{max}$", size=14)
+            ax1.set_ylim(np.min(np.array(ylims2)[0,:]),  np.max(np.array(ylims2)[0,:]))
             ax2.set_ylabel("Visibility Amplitude", size=14)
 
             ax3.set_title("Segment piston", size=16)
             ax3.set_xlabel(r"$Hole\ number$", size=14)
             ax3.set_ylabel("Piston", size=14)
             ax3.set_ylim(-25,25)
+            ax1.set_ylim(np.min(np.array(ylims3)[0,:]),  np.max(np.array(ylims3)[0,:]))
+
             plt.suptitle(self.fn)
 
             if saveplot:
