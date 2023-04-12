@@ -218,6 +218,7 @@ class ObservableSet:
             if "ylim1" in kwargs: 
                 ylo, yhi = kwargs["ylim1"]
                 ax1.set_ylim(ylo, yhi)
+            if "grid" in kwargs:  ax1.grid()
 
             ax2.set_title("Visibility Amplitude", size=16)
             ax2.set_xlabel(r"$B_{max}$", size=14)
@@ -226,6 +227,7 @@ class ObservableSet:
             if "ylim2" in kwargs: 
                 ylo, yhi = kwargs["ylim2"]
                 ax2.set_ylim(ylo, yhi)
+            if "grid" in kwargs:  ax2.grid()
 
 
             ax3.set_title("Segment piston", size=16)
@@ -235,6 +237,7 @@ class ObservableSet:
             if "ylim3" in kwargs: 
                 ylo, yhi = kwargs["ylim3"]
                 ax3.set_ylim(ylo, yhi)
+            if "grid" in kwargs:  ax3.grid()
 
             plt.suptitle(self.fn)
 
