@@ -186,7 +186,7 @@ class ObservableSet:
         else:
             plt.show()
 
-    def plot_observables_allints(self, saveplot=True, odir="./", sigclip=None):
+    def plot_observables_allints(self, saveplot=True, odir="./", sigclip=None, **kwargs):
         """
         Plot closure phases and visibility amplitudes vs. baseline length
         for all integrations of an observable set.
@@ -212,21 +212,29 @@ class ObservableSet:
                 ax3.plot(        all_pistons[:, ii], ".")
 
 
-
             ax1.set_xlabel(r"$B_{max}$", size=14)
             ax1.set_ylabel("Closure phase [deg]", size=14)
-            ax1.set_ylim(-5, 5)
             ax1.set_title("Closure Phase", size=16)
+            if "ylim1" in kwargs: 
+                ylo, yhi = kwargs["ylim1"]
+                ax1.set_ylim(ylo, yhi)
 
             ax2.set_title("Visibility Amplitude", size=16)
             ax2.set_xlabel(r"$B_{max}$", size=14)
-            ax2.set_ylim(0.50, 1.0)
+            #ax2.set_ylim(0.50, 1.0)
             ax2.set_ylabel("Visibility Amplitude", size=14)
+            if "ylim2" in kwargs: 
+                ylo, yhi = kwargs["ylim2"]
+                ax2.set_ylim(ylo, yhi)
+
 
             ax3.set_title("Segment piston", size=16)
             ax3.set_xlabel(r"$Hole\ number$", size=14)
             ax3.set_ylabel("Piston", size=14)
-            ax3.set_ylim(-29,29)
+            #ax3.set_ylim(-29,29)
+            if "ylim3" in kwargs: 
+                ylo, yhi = kwargs["ylim3"]
+                ax3.set_ylim(ylo, yhi)
 
             plt.suptitle(self.fn)
 
