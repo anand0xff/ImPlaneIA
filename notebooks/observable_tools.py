@@ -149,28 +149,36 @@ class ObservableSet:
         vis_bl = self.geometry.vis_bl
         t3_idx_str = self.geometry.t3_idx_strings
         vis_idx_str = self.geometry.vis_idx_strings
+
         if self.multi:
             cps = self.stats.med_cps
             cperr = self.stats.std_cps
+            visamp = self.stats.med_visamp
+            visamp_err = self.stats.std_visamp
             sqvis = self.stats.med_sqvis
             sqvis_err = self.stats.std_sqvis
         else:
             cps = self.oi.OI_T3.T3PHI
             cperr = self.oi.OI_T3.T3PHIERR
+            visamp = self.stats.OI_VIS.VISAMP
+            visamp_err = self.stats.OI_VIS.VISAMPERR
             sqvis = self.oi.OI_VIS2.VIS2DATA
             sqvis_err = self.oi.OI_VIS2.VIS2ERR
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 7))
+
         ax1.errorbar(t3_bl, cps, yerr=cperr, fmt="go")
         ax2.errorbar(vis_bl, sqvis, yerr=sqvis_err, fmt="go")
         ax1.set_xlabel(r"$B_{max}$", size=14)
         ax1.set_ylabel("Closure phase [deg]", size=14)
         ax1.set_title("Closure Phase", size=16)
-        ax2.set_title("Squared Visibility", size=16)
+        #x2.set_title("Squared Visibility", size=16)
+        ax2.set_title("Visibility Amplitude", size=16)
         ax2.set_xlabel(r"$B_{max}$", size=14)
-        ax2.set_ylabel("Squared Visibility", size=14)
+        ax2.set_ylabel("Visibility Amplitude", size=14)
         plt.suptitle(self.fn)
         ax1.set_ylim([-3.5, 3.5])  # closure phase y limits
-        ax2.set_ylim([0.5, 1.0])  # sqv y limits
+        ax2.set_ylim([0.4, 1.0])  # vis y limits
+
         if annotate:
             # label each point
             for ii, tri in enumerate(t3_idx_str):
