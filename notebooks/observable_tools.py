@@ -294,6 +294,70 @@ class ObservableSet:
 
 
 #---------------------------------------------------------
+# Utility function for comparing observables from two ObservableSets
+#---------------------------------------------------------
+
+def compare_observables(ois_fn, oisref_fn, saveplot=True, odir="./",
+                       phlim=(-40,30), cplim=(-2.5,2.5), valim=(0.5,1)):
+    """
+    Plot a calint files' phase vars scaled by wavelength against a ref wavelength
+
+    """
+    
+    ois = ObservableSet(ois_fn)
+    visphas = ois.oi.OI_VIS.VISPHI
+    visamps = ois.oi.OI_VIS.VISAMP
+    cps = ois.oi.OI_T3.T3PHI
+    lam = ois.oi.OI_WAVELENGTH.EFF_WAVE
+    phasemed = np.median(visphas,1)
+    cpmed = np.median(cps,1)
+    visampmed = np.median(visamps,1)
+    filt = ois.oi.info.FILT
+    
+    oisref = ObservableSet(oisref_fn)
+    visphasref = oisref.oi.OI_VIS.VISPHI
+    visampsref = oisref.oi.OI_VIS.VISAMP
+    cpsref = oisref.oi.OI_T3.T3PHI
+    lamref = oisref.oi.OI_WAVELENGTH.EFF_WAVE
+    phaserefmed = np.median(visphasref,1)
+    cprefmed = np.median(cpsref,1)
+    visamprefmed = np.median(visampsref,1)
+    filtref = oisref.oi.info.FILT
+    
+    # get indpt variables and labels for plotting from reference oiset
+    t3_bl = oisref.geometry.t3_bl
+    vis_bl = oisref.geometry.vis_bl
+    t3_idx_str = oisref.geometry.t3_idx_strings
+    vis_idx_str = oisref.geometry.vis_idx_strings
+
+    # create plot stuff
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 7))
+
+    ax1.plot(phaserefmed, phasemed, ".")
+    ax1.set_xlim(phlim[0], phlim[1])
+    ax1.set_ylim(phlim[0], phlim[1])
+    ax1.set_xlabel(filtref + " fringe phase [deg]", size=14)
+    ax1.set_ylabel(filt + " fringe phase [deg]", size=14)
+    ax1.set_title(ois.oi.info.FILT + " vs " + oisref.oi.info.FILT, size=16)
+
+
+    ax2.plot(cprefmed, cpmed, ".")
+    ax2.set_xlim(cplim[0], cplim[1])
+    ax2.set_ylim(cplim[0], cplim[1])
+    ax2.set_xlabel(filtref + " Closure phase [deg]", size=14)
+    ax2.set_ylabel(filt + " Closure phase [deg]", size=14)
+    ax1.set_title(ois.oi.info.FILT + " vs " + oisref.oi.info.FILT, size=16)
+
+
+    if saveplot:
+        plotname = os.path.join(odir, ois_fn + "_vs_" + oisref_fn + "median.png")
+        plt.savefig(plotname)
+        plt.show()
+    else:
+        plt.show()
+
+
+#---------------------------------------------------------
 #Class for comparing observables from two files already loaded into ObservableSet
 #---------------------------------------------------------
 class ObsComp:
