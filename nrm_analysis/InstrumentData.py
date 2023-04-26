@@ -275,7 +275,7 @@ class NIRISS:
             # MAST header or similar kwds info for oifits writer:
             self.updatewithheaderinfo(prihdr, scihdr)
             # Print target location, size for cropping only once
-            sh = min((scidata.shape[1]-self.peak0),(scidata.shape[2]-self.peak1))
+            sh = min((scidata.shape[1]-self.peak1),(scidata.shape[2]-self.peak0))
             print("InstrumentData.NIRISS.read_data: Target pixel location: (%i,%i)" % (self.peak0,self.peak1))
             print("InstrumentData.NIRISS.read_data: All slices will be cropped to %.0fx%.0f pixels" % (2*sh-1, 2*sh-1))
 
@@ -449,7 +449,7 @@ class NIRISS:
         apername = ph['APERNAME']
         nis_ami = siaf[apername]
         xtarg_detpx, ytarg_detpx = nis_ami.idl_to_sci(xoffset, yoffset) # decimal pixel position in subarray, 1 indexed?
-        peak1, peak0 =int(np.floor(xtarg_detpx)), int(np.floor(ytarg_detpx))
+        peak0, peak1 =int(np.floor(xtarg_detpx)), int(np.floor(ytarg_detpx))
         self.peak0, self.peak1 = peak0, peak1
 
         np.set_printoptions(precision=5, suppress=True, linewidth=160, 
