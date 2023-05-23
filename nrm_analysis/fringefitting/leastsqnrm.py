@@ -95,7 +95,9 @@ def matrix_operations(img, model, flux = None, verbose=False, linfit=False, dqm=
     cond = np.linalg.cond(inverse)
 
     x = np.dot(inverse, data_vector)
-    res = np.dot(flatmodel, x) - flatimg
+    # res = np.dot(flatmodel, x) - flatimg
+    # changed here to data - model
+    res = flatimg - np.dot(flatmodel, x) 
 
     # put bad pixels back
     naninsert = nanlist[0] - np.arange(len(nanlist[0]))
