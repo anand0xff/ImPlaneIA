@@ -19,8 +19,6 @@ import synphot
 from nrm_analysis.misctools.mask_definitions import NRM_mask_definitions 
 from nrm_analysis.misctools import utils
 from nrm_analysis.misctools import lpl_ianc
-import pysiaf
-
 
 
 um = 1.0e-6
@@ -118,7 +116,6 @@ class NIRISS:
     
         # USEBP is USEDQ in the rest of code - use
         self.usedq = usebp
-        print("Fitting omits bad pixels (identified by DO_NOT_USE value in the DQ extension)")
         self.jwst_dqflags() # creates dicts self.bpval, self.bpgroup
         # self.bpexist set True/False if  DQ fits image extension exists/doesn't
 
@@ -229,14 +226,21 @@ class NIRISS:
             try:
                 bpdata=copy.deepcopy(fitsfile['DQ'].data).astype(np.uint32) # bad pixel extension, forced to uint32
                 self.bpexist = True
-                dqmask = bpdata & self.bpval["DO_NOT_USE"] == self.bpval["DO_NOT_USE"] #
+                ##
+                dqmask_dnu = bpdata & self.bpval["DO_NOT_USE"] == self.bpval["DO_NOT_USE"] #
+                dqmask_jump = bpdata & self.bpval["JUMP_DET"] == self.bpval["JUMP_DET"]
+                dqmask = dqmask_dnu | dqmask_jump
+                ##
                 del bpdata # free memory
 
                 # True => driver excludes bad pixels when fitting
                 # False => driver uses all pixels when fitting
-                if self.usedq == True:
+                if self.usedq == False:
                     print('InstrumentData.NIRISS.read_data: will use all pixels in fit')
                     dqmask = np.zeros(scidata.shape, dtype=np.uint32) # all-zero DQ mask --> use all pixels
+                else:
+                    print("InstrumentData.NIRISS.read_data: Fitting omits bad pixels (identified by DO_NOT_USE value in the DQ extension)")
+
             except Exception as e:
                 print('InstrumentData.NIRISS.read_data: raised exception', e)
                 self.bpexist = False
@@ -270,14 +274,17 @@ class NIRISS:
                 dqmask = dqmask[:,4:, :]     # dqmask bool array to match image trimmed shape
                 print('\tRefpix-trimmed dqmask: ', dqmask.shape)
 
+            # set peak pixel location from median image -- RAC 2023
+            med_im = np.median(scidata,axis=0)
+            self.peakx, self.peaky, self.hh = utils.min_distance_to_edge(med_im)
+
             prihdr=fitsfile[0].header
             scihdr=fitsfile[1].header
             # MAST header or similar kwds info for oifits writer:
             self.updatewithheaderinfo(prihdr, scihdr)
             # Print target location, size for cropping only once
-            sh = min((scidata.shape[1]-self.peak1),(scidata.shape[2]-self.peak0))
-            print("InstrumentData.NIRISS.read_data: Target pixel location: (%i,%i)" % (self.peak0,self.peak1))
-            print("InstrumentData.NIRISS.read_data: All slices will be cropped to %.0fx%.0f pixels" % (2*sh-1, 2*sh-1))
+            print("InstrumentData.NIRISS.read_data: Target pixel location: (%i,%i)" % (self.peakx+4,self.peaky))
+            print("InstrumentData.NIRISS.read_data: All slices will be cropped to %.0fx%.0f pixels" % (2*self.hh+1, 2*self.hh+1))
 
             # Directory name into which to write txt observables & optional fits diagnostic files
             # The input fits image or cube of images file rootname is used to create the output
@@ -413,6 +420,7 @@ class NIRISS:
         # if data was generated on the average pixel scale of the header
         # then this is the right value that gets read in, and used in fringe fitting
         pscalex_deg, pscaley_deg = self.degrees_per_pixel(sh)
+
         #
         info4oif_dict['pscalex_deg'] = pscalex_deg
         info4oif_dict['pscaley_deg'] = pscaley_deg
@@ -442,15 +450,7 @@ class NIRISS:
         elif sh["NAXIS"] == 3:
             # each slice is one INTegration or 'ramp'
             self.itime = ph["EFFINTTM"]; info4oif_dict['itime'] = self.itime
-        # Get integer-pixel position of target from siaf & header info
-        siaf = pysiaf.Siaf('NIRISS')
-        # select AMI aperture by name
-        xoffset,yoffset = ph['XOFFSET'], ph['YOFFSET']
-        apername = ph['APERNAME']
-        nis_ami = siaf[apername]
-        xtarg_detpx, ytarg_detpx = nis_ami.idl_to_sci(xoffset, yoffset) # decimal pixel position in subarray, 1 indexed?
-        peak0, peak1 =int(np.floor(xtarg_detpx)), int(np.floor(ytarg_detpx))
-        self.peak0, self.peak1 = peak0, peak1
+    
 
         np.set_printoptions(precision=5, suppress=True, linewidth=160, 
                             formatter={'float': lambda x: "%10.5f," % x})
