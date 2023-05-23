@@ -1035,17 +1035,21 @@ def clip_oifits(oifitsfn, good_indices, method='med', suffix=''):
         raise Exception('Multi-integration oifits file expected (2d observable arrays)')
     print('Reading multi-integration OIFITS file...')
     # arrays to update
-    namedict = {'OI_VIS':['VISAMP','VISAMPERR','VISPHI','VISPHIERR'],
+    namedict = {'OI_ARRAY':['PISTONS','PIST_ERR','PISTON_T','PISTON_C'],
+                'OI_VIS':['VISAMP','VISAMPERR','VISPHI','VISPHIERR'],
                 'OI_VIS2':['VIS2DATA','VIS2ERR'],
                 'OI_T3':['T3AMP','T3AMPERR','T3PHI','T3PHIERR']}
     
     outdict_multi = copy.deepcopy(nrm_dct)
     for extname in namedict:
         for colname in namedict[extname]:
-            #print(nrm_dct[extname][colname].shape)
-            outarr = nrm_dct[extname][colname][:,good_indices]
-            # print(extname, colname,nrm_dct[extname][colname].shape,'-->',outarr.shape)
-            outdict_multi[extname][colname] = outarr
+            try:
+                #print(nrm_dct[extname][colname].shape)
+                outarr = nrm_dct[extname][colname][:,good_indices]
+                # print(extname, colname,nrm_dct[extname][colname].shape,'-->',outarr.shape)
+                outdict_multi[extname][colname] = outarr
+            except KeyError as e: # e.g. different PISTONS keywords present
+                continue
     multi_outname = bn.replace('.oifits','_%s.oifits'%suffix)
     oifits.save(outdict_multi, filename=multi_outname, datadir=indir) # this saves the trimmed multi-oifits
     # save updated averaged oifits too
@@ -1057,16 +1061,25 @@ def clip_oifits(oifitsfn, good_indices, method='med', suffix=''):
                 # get the corresponding data column
                 datacol = colname.replace('ERR','')
                 if datacol == 'VIS2':
-                    datacol = 'VIS2DATA'
-                arr = outdict_multi[extname][datacol]
+                    arr = outdict_multi[extname]['VIS2DATA']
+                if datacol == 'PIST_': # handle different PISTONS keyword present, again
+                    for eee in ['PISTONS','PISTON_T','PISTON_C']:
+                        try:
+                            arr = outdict_multi[extname][eee]
+                        except KeyError:
+                            continue
                 outarr = np.std(arr, axis=1)
             else:
-                arr = outdict_multi[extname][colname]
+                try:
+                    arr = outdict_multi[extname][colname]
+                except KeyError:
+                    continue
                 if method=='med':
                     outarr = np.median(arr, axis=1)
                 else:
                     outarr = np.mean(arr, axis=1)
             outdict_avg[extname][colname] = outarr
+
     avg_outname = bn.replace('multi_','').replace('.oifits','_%s.oifits'%suffix)
     oifits.save(outdict_avg,filename=avg_outname,datadir=indir)
 

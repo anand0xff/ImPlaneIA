@@ -1123,6 +1123,9 @@ def combine_src_filt(bandpass, srcspec, trim=0.01, nlambda=19, verbose=False, pl
         low_idx, high_idx = goodthru[0][0], goodthru[0][-1]
         wl_filt, th_filt = wl_filt[low_idx:high_idx], th_filt[low_idx:high_idx]
         # print(len(wl_filt),len(th_filt))
+    ptsin = len(wl_filt)
+    if nlambda == None:
+        nlambda = ptsin # Don't bin throughput
     # get effstim for bins of wavelengths
     # plt.plot(wl_filt,th_filt)
     minwave, maxwave = wl_filt.min(), wl_filt.max()  # trimmed or not
@@ -1131,7 +1134,6 @@ def combine_src_filt(bandpass, srcspec, trim=0.01, nlambda=19, verbose=False, pl
     deltawave = wave_bin_edges[1] - wave_bin_edges[0]
     area = 1 * (u.m * u.m)
     effstims = []
-    ptsin = len(wl_filt)
     binfac = ptsin // nlambda
     if verbose: print("Binning spectrum by %i: from %i points to %i points" % (binfac, ptsin, nlambda))
     for wave in wavesteps:
@@ -1365,7 +1367,7 @@ def baselinify(ctrs):
     return uvs, bllengths, label
 
 def count_cps(ctrs):
-    from scipy.misc import comb
+    from scipy.special import comb
     N = len(ctrs)
     ncps = int(comb(N,3))
     cp_label = np.zeros((ncps, 3))

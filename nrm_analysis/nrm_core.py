@@ -340,8 +340,14 @@ def fit_fringes_single_integration(args):
     
     # Where appropriate, the slice under consideration is centered, and processed
     if self.instrument_data.arrname=="jwst_g7s6c":
-        # get the cropped image and identically-cropped bad pixel data:
-        self.ctrd, self.dqslice = utils.center_imagepeak(
+        try: # RAC 2022
+            peakx, peaky = self.instrument_data.peakx, self.instrument_data.peaky
+            r = self.instrument_data.hh
+            self.ctrd = self.scidata[slc,int(peakx-r):int(peakx+r+1), int(peaky-r):int(peaky+r+1)]
+            self.dqslice = self.dqmask[slc,int(peakx-r):int(peakx+r+1), int(peaky-r):int(peaky+r+1)]
+        except Exception as err: # revert to the old way
+            print(err)
+            self.ctrd, self.dqslice = utils.center_imagepeak(
                                     self.scidata[slc,:,:], 
                                     dqm=self.dqmask[slc,:,:]) 
     else:

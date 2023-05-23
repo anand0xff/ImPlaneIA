@@ -25,14 +25,16 @@ from scipy.ndimage import median_filter
 
 from jwst.datamodels import dqflags
 
+from nrm_analysis.misctools.utils import min_distance_to_edge
+
 # =============================================================================
 # CODE FROM ANAND FOLLOWS
 # =============================================================================
 
 micron = 1.0e-6
-filts = ['F277M', 'F380M', 'F430M', 'F480M', 'F356W', 'F444W']
+filts = ['F277W', 'F380M', 'F430M', 'F480M', 'F356W', 'F444W']
 filtwl_d = {  # pivot wavelengths
-    'F277M': 2.776e-6,  # less than Nyquist
+    'F277W': 2.776e-6,  # less than Nyquist
     'F380M': 3.828e-6,
     'F430M': 4.286e-6,
     'F480M': 4.817e-6,
@@ -40,7 +42,7 @@ filtwl_d = {  # pivot wavelengths
     'F444W': 4.435e-6,  # semi-forbidden
 }
 filthp_d = {  # half power limits
-    'F277M': (2.413e-6, 3.142e-6),
+    'F277W': (2.413e-6, 3.142e-6),
     'F380M': (3.726e-6, 3.931e-6),
     'F430M': (4.182e-6, 4.395e-6),
     'F480M': (4.669e-6, 4.971e-6),
@@ -264,7 +266,6 @@ def fix_bad_pixels(indir,
         data = hdul['SCI'].data
         pxdq0 = hdul['DQ'].data
         imsz = data.shape
-        #print('Im size:', imsz)
         if (not (imsz[1] == 80 and imsz[2] == 80)):
             #raise UserWarning('Expecting 80x80 subarrays')
             # skip file; probably TA exposure
@@ -279,22 +280,14 @@ def fix_bad_pixels(indir,
         # only correct pixels marked DO_NOT_USE in the DQ array
         # modified by Jens to also correct JUMP_DET pixels
 
-        ## Sometimes there is a patch of NaN pixels that causes this code to fail.
-        # First replace them with pixel values from neighboring integration, then
+        # DNU, some other pixels are now NaNs in cal level products.
+        # Replace them with 0, then
         # add DO_NOT_USE flags to positions in DQ array so they will be corrected.
-        nanidxlist = np.argwhere(np.isnan(data))
-        if len(nanidxlist) > 1:
-            print("Identified %i NaN pixels to correct" % len(nanidxlist))
-            for idx in nanidxlist:
-                try:
-                    data[idx[0],idx[1],idx[2]] = data[idx[0]-1,idx[1],idx[2]]
-                except IndexError:
-                    data[idx[0],idx[1],idx[2]] = data[idx[0]+1,idx[1],idx[2]]
-
-                pxdq0[idx[0],idx[1],idx[2]] += 1 # add DNU flag to each nan pixel
+        data[np.isnan(data)] = 0
+        pxdq0[np.isnan(data)] += 1
 
         totpix = imsz[0] * imsz[1] * imsz[2]
-        nrefpix = nrefrow*imsz[1]*imsz[0] # 4-pixel-wide stripe on each frame
+        nrefpix = nrefrow*imsz[1]*imsz[0] # 5-pixel-wide stripe on each frame
         nflagged_all = np.count_nonzero(pxdq0) - nrefpix
         DO_NOT_USE = dqflags.pixel["DO_NOT_USE"]
         JUMP_DET = dqflags.pixel["JUMP_DET"]
@@ -320,14 +313,11 @@ def fix_bad_pixels(indir,
         rdns = 18.32  # e-
         pxsc = pix_arcsec * 1000.  # mas/pix
 
+        # RC 2023: changed how centering/cropping is done to avoid CR hit issues
         # Find the PSF centers and determine the maximum possible frame size.
-        ww_max = []
-        for j in range(imsz[0]):
-            ww_max += [np.unravel_index(np.argmax(median_filter(data[j], size=3)), data[j].shape)] # JK: added median filter to catch PSF center despite hot pixels
-        ww_max = np.array(ww_max)
-        xh = min(imsz[1] - stats.mode(ww_max[:, 0]).mode, stats.mode(ww_max[:, 0]).mode - nrefrow) # the bottom 4 rows are reference pixels
-        yh = min(imsz[2] - stats.mode(ww_max[:, 1]).mode, stats.mode(ww_max[:, 1]).mode - 0)
-        sh = int(min(xh, yh))
+        med_im = np.median(data,axis=0)
+        peakx, peaky, sh = min_distance_to_edge(med_im)
+
         print('      Cropping all frames to %.0fx%.0f pixels' % (2 * sh, 2 * sh))
 
         # Compute field-of-view and Fourier sampling.
@@ -356,15 +346,14 @@ def fix_bad_pixels(indir,
         #     print('   SKIPPING: subframe too small to estimate noise')
         #     continue
 
-
         # Go through all frames.
         for j in range(imsz[0]):
             print('         Frame %.0f of %.0f' % (j + 1, imsz[0]))
 
-            # Now cut out the subframe.
-            data_cut = deepcopy(data[j, ww_max[j, 0] - sh:ww_max[j, 0] + sh, ww_max[j, 1] - sh:ww_max[j, 1] + sh])
+            # RC 2023: changed how centering/cropping is done to avoid CR hit issues
+            data_cut = deepcopy(data[j,int(peakx-sh):int(peakx+sh), int(peaky-sh):int(peaky+sh)])
             data_orig = deepcopy(data_cut)
-            pxdq_cut = deepcopy(pxdq[j, ww_max[j, 0] - sh:ww_max[j, 0] + sh, ww_max[j, 1] - sh:ww_max[j, 1] + sh])
+            pxdq_cut = deepcopy(pxdq[j,int(peakx-sh):int(peakx+sh), int(peaky-sh):int(peaky+sh)])
             pxdq_cut = pxdq_cut > 0.5
             pxdq_orig = deepcopy(pxdq_cut)
 
@@ -423,10 +412,10 @@ def fix_bad_pixels(indir,
                 pxdq_cut = ((pxdq_cut > 0.5) | (temp > 0.5)).astype('int')
 
             # Put the modified subframes back into the data cube.
-            data[j, ww_max[j, 0] - sh:ww_max[j, 0] + sh, ww_max[j, 1] - sh:ww_max[j, 1] + sh] = fourier_corr(data_orig,
-                                                                                                             pxdq_cut,
-                                                                                                             fmas)
-            pxdq[j, ww_max[j, 0] - sh:ww_max[j, 0] + sh, ww_max[j, 1] - sh:ww_max[j, 1] + sh] = pxdq_cut
+            data[j, int(peakx-sh):int(peakx+sh), int(peaky-sh):int(peaky+sh)] = fourier_corr(data_orig,
+                                                                                            pxdq_cut,
+                                                                                            fmas)
+            pxdq[j, int(peakx-sh):int(peakx+sh), int(peaky-sh):int(peaky+sh)] = pxdq_cut
 
             # Show plot if desired.
             if (show is not None and str(j) in show):
