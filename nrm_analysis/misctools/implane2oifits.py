@@ -435,11 +435,12 @@ def populate_NRM(nrm_t, method='med'):
     visamp_in = nrm_t.fa
     visphi_in = nrm_t.fp
     vis2_in = visamp_in**2
+    """ cp's that are np.angle(triple-product) might not need this unwrapping
     shift2pi = np.zeros(nrm_t.cp.shape)
     shift2pi[nrm_t.cp >= 6] = 2 * np.pi
     shift2pi[nrm_t.cp <= -6] = -2 * np.pi
-
     nrm_t.cp -= shift2pi
+    """
 
     cp_in = nrm_t.cp
     cpamp_in = nrm_t.ca
