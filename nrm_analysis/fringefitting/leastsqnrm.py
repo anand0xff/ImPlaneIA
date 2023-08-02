@@ -313,7 +313,7 @@ def tan2visibilities(coeffs, verbose=False):
         delta = np.zeros(int( (len(coeffs) -1)/2 ))  # py3
         amp = np.zeros(int( (len(coeffs) -1)/2 ))  # py3
         for q in range(int( (len(coeffs) -1)/2 )):  # py3
-            delta[q] = (np.arctan2(coeffs[2*q+2], coeffs[2*q+1])) 
+            delta[q] = (np.arctan2(coeffs[2*q+2], coeffs[2*q+1]))  # radians
             amp[q] = np.sqrt(coeffs[2*q+2]**2 + coeffs[2*q+1]**2)
         if verbose:
             print("shape coeffs", np.shape(coeffs))
@@ -390,12 +390,9 @@ def phases_and_amplitudes(solution_coefficients, N=7):
     soln = np.array([solution_coefficients[i]/solution_coefficients[0] for i in range(Nsoln)])
 
     # compute fringe quantitites
-    fringeamp, fringephase = tan2visibilities( soln )    
+    fringeamp, fringephase = tan2visibilities( soln )    # fringephases in radians
     
-#     import pdb
-#     pdb.set_trace()
-
-    # compute closure phases
+    # compute closure phases / radians
     if type(solution_coefficients[0]).__module__ != 'uncertainties.core':
         redundant_closure_phases = redundant_cps(np.array(fringephase), N=N)
     else:
@@ -408,19 +405,36 @@ def phases_and_amplitudes(solution_coefficients, N=7):
 
 
 def redundant_cps(deltaps, N = 7):
+    """ 
+        input: delta-phases are fringe phases for 'half the vector baselines'
+        returns cps, fringephasearray in radians
+    """
+
+    # fill in the missing half baseline phases using Hermitian property of FT(real image)
     fringephasearray = populate_antisymmphasearray(deltaps, N=N)
+
     if type(deltaps[0]).__module__ != 'uncertainties.core':
         cps = np.zeros(int(comb(N,3)))
     else:
         cps = unumpy.uarray( np.zeros(np.int(comb(N,3))),np.zeros(np.int(comb(N,3))) )    
+
     nn=0
     for kk in range(N-2):
         for ii in range(N-kk-2):
             for jj in range(N-kk-ii-2):
+                """ Until now this was the calculation:
                 cps[nn+jj] = fringephasearray[kk, ii+kk+1] \
                        + fringephasearray[ii+kk+1, jj+ii+kk+2] \
                        + fringephasearray[jj+ii+kk+2, kk]
+                """
+                tripleproduct_phasor = \
+                    np.exp(1j * fringephasearra[kk, ii+kk+1]) * \
+                    np.exp(1j * fringephasearray[ii+kk+1, jj+ii+kk+2]) * \
+                    np.exp(1j * fringephasearray[jj+ii+kk+2, kk])
+                cps[nn+jj] = np.angle(tripleproductphasor)
+                
             nn = nn+jj+1
+
     if type(deltaps[0]).__module__ != 'uncertainties.core':
         return cps
     else:
