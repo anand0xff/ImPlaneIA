@@ -428,10 +428,10 @@ def redundant_cps(deltaps, N = 7):
                        + fringephasearray[jj+ii+kk+2, kk]
                 """
                 tripleproduct_phasor = \
-                    np.exp(1j * fringephasearra[kk, ii+kk+1]) * \
+                    np.exp(1j * fringephasearray[kk, ii+kk+1]) * \
                     np.exp(1j * fringephasearray[ii+kk+1, jj+ii+kk+2]) * \
                     np.exp(1j * fringephasearray[jj+ii+kk+2, kk])
-                cps[nn+jj] = np.angle(tripleproductphasor)
+                cps[nn+jj] = np.angle(tripleproduct_phasor)
                 
             nn = nn+jj+1
 
