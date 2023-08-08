@@ -292,6 +292,8 @@ def deltapistons(pistons):
 
 def tan2visibilities(coeffs, verbose=False):
     """
+    Returns fringeamps/dimensionless, phases/radians
+
     Technically the fit measures phase AND amplitude, so to retrieve
     the phase we need to consider both sin and cos terms. Consider one fringe:
     A { cos(kx)cos(dphi) +  sin(kx)sin(dphi) } = 
@@ -304,6 +306,7 @@ def tan2visibilities(coeffs, verbose=False):
 
     Edit 10/2014: pistons now returned in units of radians!!
     Edit 05/2017: J. Sahlmann added support of uncertainty propagation
+
     """
     if type(coeffs[0]).__module__ != 'uncertainties.core':
         # if uncertainties not present, proceed as usual

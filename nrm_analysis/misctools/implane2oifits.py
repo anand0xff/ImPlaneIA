@@ -430,11 +430,16 @@ def populate_NRM(nrm_t, method='med'):
     Errors of multi-slice observables will be all zero (for now)
     Otherwise, take median or mean (assumed if method not 'med' or 'multi').
 
+    nrm_t, like any NRM_Model instance, has angles in radians.  Convert to complex visibilities for averaging.
+
     """
 
     visamp_in = nrm_t.fa
     visphi_in = nrm_t.fp
     vis2_in = visamp_in**2
+    # in order to average cv's not phases & amps separately:
+    cvs_in = visphi_in * np.exp(1j*np.radians(visphi_in)
+
     """ cp's that are np.angle(triple-product) might not need this unwrapping
     shift2pi = np.zeros(nrm_t.cp.shape)
     shift2pi[nrm_t.cp >= 6] = 2 * np.pi
@@ -447,7 +452,7 @@ def populate_NRM(nrm_t, method='med'):
     pistons_in = nrm_t.pistons
 
 
-    if method == 'multi':
+    if method == 'multi': # no averaging
         vis2 = vis2_in.T
         e_vis2 = np.zeros(vis2.shape)
         visamp = visamp_in.T
@@ -460,7 +465,15 @@ def populate_NRM(nrm_t, method='med'):
         e_cpamp = np.zeros(cpamp.shape)
         pist = pistons_in.T
         e_pist = np.zeros(pist.shape)
-    elif method == 'med':
+    elif method == 'med': # average over complex quantities
+        cv = np.median(cvs_in, axis=0)                  # median CVs, array size = number of baseline pairs
+        vis2 = np.median(pow(np.abs(cvs),2) , axis=0)   # V2, array size = number of baseline pairs
+        e_vis2 = np.std(pow(np.abs(cvs),2), axis=0)     # errors on V2
+        visamp = np.median(np.abs(cvs), axis=0)         # vis amp,  array size = number of baseline pairs
+        e_visamp = np.std(np.abs(cvs), axis=0)          # errors on vis amp
+        visphi = np.median(np.angle(cvs), axis=0)       # vis phase, array size = number of baseline pairs
+        e_visphi = np.std(np.angle(cvs), axis=0 )       # error in vis phase, array size = number of baseline pairs
+        """
         vis2 = np.median(vis2_in, axis=0)  # V2
         e_vis2 = np.std(vis2_in, axis=0)  # Error on V2
         visamp = np.median(visamp_in, axis=0)  # Vis. amp
@@ -473,7 +486,9 @@ def populate_NRM(nrm_t, method='med'):
         e_cpamp = np.std(cpamp_in, axis=0)
         pist = np.median(pistons_in, axis=0)
         e_pist = np.std(pistons_in, axis=0)
-    else:
+        """
+    else: # average over complex quantities
+        """
         vis2 = np.mean(vis2_in, axis=0)  # V2
         e_vis2 = np.std(vis2_in, axis=0)  # Error on V2
         visamp = np.mean(visamp_in, axis=0)  # Vis. amp
@@ -486,6 +501,7 @@ def populate_NRM(nrm_t, method='med'):
         e_cpamp = np.std(cpamp_in, axis=0)
         pist = np.mean(pistons_in, axis=0)
         e_pist = np.std(pistons_in, axis=0)
+        """
 
 
     output = {'vis2': vis2,
@@ -679,9 +695,13 @@ def populate_NRM(nrm_t, method='med'):
 # ##################  reading oifits into memory... end
 
 def observable2dict(nrm, multi=False, display=False):
-    """ Convert nrm data in an Observable loaded with `ObservablesFromText` into 
-        a dictionary compatible with oifits.save and oifits.show function.
-    nrm:   an ObservablesFromText object, treated as a target if nrm_c=None
+    """ 
+    Convert nrm data in an Observable loaded with `ObservablesFromText` into 
+    a dictionary compatible with oifits.save and oifits.show function.
+
+    nrm:   an ObservablesFromText object, treated as a target if nrm_c=None.
+           Note input nrm object angles are radians
+
     multi:  Bool. If true, do not take mean or median of slices
             (preserve separate integrations)
     """
