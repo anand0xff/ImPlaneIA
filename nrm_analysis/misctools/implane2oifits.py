@@ -768,7 +768,7 @@ def observable2dict(nrm, multi=False, display=False):
                      'T3PHI': nrmd2c.cp,
                      'T3PHIERR': nrmd2c.e_cp,
                      'T3AMP': nrmd2c.cpamp,
-                     'T3AMPERR': nrmd2c.e_cp,
+                     'T3AMPERR': nrmd2c.e_cpamp,
                      'U1COORD': u1coord,
                      'V1COORD': v1coord,
                      'U2COORD': u2coord,

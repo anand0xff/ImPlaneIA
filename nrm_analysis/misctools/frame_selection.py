@@ -227,21 +227,26 @@ def clip_oifits(oifitsfn, good_indices, method='med', suffix=''):
     for extname in namedict:
         for colname in namedict[extname]:
             if 'ERR' in colname:
-                # get the corresponding data column
-                datacol = colname.replace('ERR','')
-                if datacol == 'VIS2':
-                    arr = outdict_multi[extname]['VIS2DATA']
-                if datacol == 'PIST_': # handle different PISTONS keyword present, again
-                    for eee in ['PISTONS','PISTON_T','PISTON_C']:
-                        try:
-                            arr = outdict_multi[extname][eee]
-                        except KeyError:
-                            continue
-                outarr = np.std(arr, axis=1)
+                try:
+                    # get the corresponding data column
+                    datacol = colname.replace('ERR','')
+                    if datacol == 'VIS2':
+                        arr = outdict_multi[extname]['VIS2DATA']
+                    if datacol == 'PIST_': # handle different PISTONS keyword present, again
+                        for eee in ['PISTONS','PISTON_T','PISTON_C']:
+                            try:
+                                arr = outdict_multi[extname][eee]
+                            except KeyError as e:
+                                continue
+
+                    outarr = np.std(arr, axis=1)
+                except UnboundLocalError:
+                    continue
             else:
                 try:
                     arr = outdict_multi[extname][colname]
-                except KeyError:
+                except KeyError as e:
+                    print(e)
                     continue
                 if method=='med':
                     outarr = np.median(arr, axis=1)
