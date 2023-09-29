@@ -450,7 +450,7 @@ class NRM_Model():
         self.flux = self.soln[0]
         self.soln = self.soln/self.soln[0]
 
-        # fringephase now in radians
+        # fringephase annd other angles returned to NRM_Model's self in radians
         self.fringeamp, self.fringephase = leastsqnrm.tan2visibilities(self.soln)
         self.fringepistons = utils.fringes2pistons(self.fringephase, len(self.ctrs))
         self.redundant_cps = leastsqnrm.redundant_cps(self.fringephase, N=self.N)
