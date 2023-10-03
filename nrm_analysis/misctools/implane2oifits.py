@@ -388,11 +388,11 @@ def average_observables(nrm, averfunc):
 
     # First get averages and stats of complex visibilities
     # put in JSB notation
-    complex_vis = nrm.fa * np.exp(1j*np.radians(nrm.fp) # array shape is [nslices, nbl] 
+    complex_vis = nrm.fa * np.exp(1j*np.radians(nrm.fp)) # array shape is [nslices, nbl] 
     mean_complex_vis = averfunc(complex_vis, axis = 0) # now there are nbl cv's
 
     # average each of the nbl CVs over slices (integrations)
-    aver_v_phasor = np.abs((averfunc(complex_vis, axis = 0)), \
+    aver_v_phasor = np.abs((averfunc(complex_vis, axis = 0))), \
                     np.angle(averfunc(complex_vis, axis = 0))
     # calculate CV stats for each baseline, averaging over slices (integrations)
     var_v_real = np.var(complex_vis.real, axis= 0) / nbl
