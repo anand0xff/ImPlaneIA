@@ -102,7 +102,7 @@ class ObservableSet:
                     for q in range(nholes):
                         if i < j and j < k and k < q:
                             qlist.append((i, j, k, q))
-        qarray = np.array(qlist).astype(np.int)
+        qarray = np.array(qlist).astype(np.int32)
         uvwlist = []
         # foreach row of 3 elts...
         for quad in qarray:
@@ -168,7 +168,7 @@ class ObservableSet:
         ax2.set_ylabel("Squared Visibility", size=14)
         plt.suptitle(self.fn)
         ax1.set_ylim([-3.5, 3.5])  # closure phase y limits
-        ax2.set_ylim([0.8, 1.1])  # sqv y limits
+        ax2.set_ylim([0.5, 1.1])  # sqv y limits
         if annotate:
             # label each point
             for ii, tri in enumerate(t3_idx_str):
