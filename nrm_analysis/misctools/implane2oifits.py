@@ -128,7 +128,7 @@ class ObservablesFromText():
                     for q in range(nholes):
                         if i < j and j < k and k < q:
                             qlist.append((i, j, k, q))
-        qarray = np.array(qlist).astype(np.int)
+        qarray = np.array(qlist).astype(np.int32)
         if self.verbose:
             print("qarray", qarray.shape, "\n", qarray)
         qname = []
@@ -157,7 +157,7 @@ class ObservablesFromText():
                 for k in range(nholes):
                     if i < j and j < k:
                         tlist.append((i, j, k))
-        tarray = np.array(tlist).astype(np.int)
+        tarray = np.array(tlist).astype(np.int32)
         if self.verbose:
             print("tarray", tarray.shape, "\n", tarray)
 
@@ -188,7 +188,7 @@ class ObservablesFromText():
             for j in range(nholes):
                 if i < j:
                     blist.append((i, j))
-        barray = np.array(blist).astype(np.int)
+        barray = np.array(blist).astype(np.int32)
         # blname = []
         bllist = []
         for basepair in blist:
@@ -366,8 +366,9 @@ def average_observables(nrm, averfunc):
     # put in JSB notation
     nh = nrm.nh
     nbl = nrm.nbl
-    ncp = nrm.cp
+    ncp = nrm.ncp
     nca = nrm.nca
+
     # per JSB
     data1_visamp = np.zeros([nbl])
     data1_visamperr = np.zeros([nbl])
@@ -383,6 +384,7 @@ def average_observables(nrm, averfunc):
     data1_caerror = np.zeros([nca])  # Anand added
 
 
+
     # In order to average cv's not phases & amps separately:
     # convert amplitudes+phases to complex visibilities:
 
@@ -392,15 +394,14 @@ def average_observables(nrm, averfunc):
     mean_complex_vis = averfunc(complex_vis, axis = 0) # now there are nbl cv's
 
     # average each of the nbl CVs over slices (integrations)
-    aver_v_phasor = np.abs((averfunc(complex_vis, axis = 0)), \
-                    np.angle(averfunc(complex_vis, axis = 0)))
+    aver_v_phasor = np.abs((averfunc(complex_vis, axis = 0))), \
+                    np.angle(averfunc(complex_vis, axis = 0))
     # calculate CV stats for each baseline, averaging over slices (integrations)
     var_v_real = np.var(complex_vis.real, axis= 0) / nbl
     var_v_im = np.var(complex_vis.imag , axis= 0) / nbl
     std_v_real = np.std(complex_vis.real, axis= 0) /np.sqrt(nbl)
     std_v_im = np.std(complex_vis.imag, axis= 0) / np.sqrt(nbl)
     # 
-
     for mm in range(nbl):  # Anand: possible cleanup needed if using medians... TBD
         cov_mat = [[var_v_real[mm], std_v_real[mm] * std_v_im[mm]], [std_v_real[mm] * std_v_im[mm], var_v_im[mm]]]
         c = np.cos(aver_v_phasor[1][mm]); s = np.sin(aver_v_phasor[1][mm])
@@ -413,23 +414,13 @@ def average_observables(nrm, averfunc):
         data1_v2[mm] = mean_complex_vis[mm].real ** 2 + mean_complex_vis[mm].imag ** 2 - var_v_real[mm] - var_v_im[mm]
         data1_v2err[mm] = 2 * data1_v2[mm] * np.sqrt(V_rt[0, 0])
 
-    # Anand does not know what this does... Joel's code is :
-    index_cp = np.zeros([int(ncp), 3], dtype='int')
-    for k in range(ncp):
-        [ind1] = np.where(
-            (baselines[:, 0] == closure_phases[k, 0]) & (baselines[:, 1] == closure_phases[k, 1]))
-        [ind2] = np.where(
-            (baselines[:, 0] == closure_phases[k, 1]) & (baselines[:, 1] == closure_phases[k, 2]))
-        [ind3] = np.where(
-            (baselines[:, 0] == closure_phases[k, 0]) & (baselines[:, 1] == closure_phases[k, 2]))
-        index_cp[k, 0] = int(ind1[0])  ##ind1 is a tuple
-        index_cp[k, 1] = int(ind2[0])
-        index_cp[k, 2] = int(ind3[0])
-    # Are the three lines for ind1, ind2, ind3 correct?  (Anand)
+    # lines formerly here copied from JSB were just creating lists of CP indices; we already have this
+    index_cp = nrm.tholes
 
     t3_model = np.zeros([complex_vis.shape[0], int(ncp)], dtype=complex)
     bis_phase = np.zeros([complex_vis.shape[0], int(ncp)])
     bis_amp = np.zeros([complex_vis.shape[0], int(ncp)])
+    V2_mod = np.zeros([nrm.nslices,nbl]) # Rachel added
     
     for ll in range(t3_model.shape[0]):
         for mm in range(t3_model.shape[1]):
@@ -483,6 +474,9 @@ def populate_NRM(nrm_t, method='med'):
     nrm_t has angles in radians.  Convert to complex visibilities for averaging.
 
     """
+    visamp_in = nrm_t.fa
+    visphi_in = nrm_t.fp
+    vis2_in = visamp_in**2
     cp_in = nrm_t.cp
     cpamp_in = nrm_t.ca
     pistons_in = nrm_t.pistons
@@ -501,11 +495,11 @@ def populate_NRM(nrm_t, method='med'):
         pist = pistons_in.T
         e_pist = np.zeros(pist.shape)
     elif method == 'med': # average over complex quantities
-        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, cpamp, e_cpamp =  average_observables(nrm, np.median) 
+        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, cpamp, e_cpamp =  average_observables(nrm_t, np.median) 
         pist = np.median(pistons_in, axis=0)
         e_pist = np.std(pistons_in, axis=0)
     else: # average over complex quantities
-        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, cpamp, e_cpamp =  average_observables(nrm, np.mean) 
+        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, cpamp, e_cpamp =  average_observables(nrm_t, np.mean) 
         pist = np.mean(pistons_in, axis=0)
         e_pist = np.std(pistons_in, axis=0)
 
