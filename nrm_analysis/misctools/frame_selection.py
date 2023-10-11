@@ -12,7 +12,7 @@ from astropy.stats import sigma_clip
 
 
 import nrm_analysis.misctools.oifits as oifits
-from notebooks.observable_tools import ObservableSet
+from nrm_analysis.misctools.observable_tools import ObservableSet
 
 
 def frame_select(calintsfn, nsigma=1, save_mtfs=True):
