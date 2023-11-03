@@ -15,17 +15,23 @@ import nrm_analysis.misctools.oifits as oifits
 from nrm_analysis.misctools.observable_tools import ObservableSet
 
 
-def frame_select(calintsfn, nsigma=1, save_mtfs=True):
+def frame_select(calintsfn, nsigma=1, save_mtfs=True, firstfew=None):
     """
     Takes a calints file and performs frame selection based on the FT of each integration.
     Integrations where the sum of the central 9 pixels of the MTF is more than nsigma from the mean
-    are discarded. Returns list of good indices.
+    are discarded. Firstfew should match the argument given to InstrumentData,
+    otherwise indexing errors may be encountered when calling clip_oifits.
+    Returns list of good indices.
     """
     with fits.open(calintsfn) as hdu:
         data = hdu['SCI'].data
     imsz = data.shape
     if len(imsz) != 3:
         raise Exception('Image must be 3d multi-integration (calints file)')
+    if firstfew != None:
+        print('Using firstfew=%i' % firstfew)
+        data = data[:firstfew,:,:]
+        imsz = data.shape
     # maxlist = []
     # for j in range(imsz[0]):
     #     maxlist += [np.unravel_index(np.argmax(data[j]), data[j].shape)] 
@@ -37,6 +43,7 @@ def frame_select(calintsfn, nsigma=1, save_mtfs=True):
     # maxlist = maxlist[dupes]
     # peak = stats.mode(maxlist).mode
     # find center from median image to be insensitive to CR hits
+    print('ln 45 data.shape',data.shape)
     medimage = np.median(data,axis=0)
     peak = np.where(medimage==medimage.max())
     peak0,peak1 = peak[0],peak[1]
@@ -67,7 +74,9 @@ def frame_select(calintsfn, nsigma=1, save_mtfs=True):
     return goodidxlist
 
 
-def median_difference(filename,nsigma=10,display=True):
+def median_difference(filename,nsigma=10,display=True, firstfew=None):
+    # use the whole calints file for the median even if firstfew != None
+    # but only look for outliers in firstfew ints
     with fits.open(filename) as hduin:
         data = hduin['SCI'].data
     # check that data is 3d
@@ -76,6 +85,8 @@ def median_difference(filename,nsigma=10,display=True):
     median = np.median(data, axis=0)
     std = np.std(data,axis=0)
     # Make array for slice - median cube
+    if firstfew != None:
+        data = data[:firstfew,:,:]
     mediandiff = np.empty_like(data)
     mediandiff[:,:,:] = data - median
     # get locations with nsigma outliers from median
@@ -246,7 +257,6 @@ def clip_oifits(oifitsfn, good_indices, method='med', suffix=''):
                 try:
                     arr = outdict_multi[extname][colname]
                 except KeyError as e:
-                    print(e)
                     continue
                 if method=='med':
                     outarr = np.median(arr, axis=1)
