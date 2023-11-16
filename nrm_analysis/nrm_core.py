@@ -29,6 +29,7 @@ BinaryAnalyze - Detection, mcmc modeling, visualization tools
 from __future__ import print_function
 # Standard imports
 import os, sys, time
+import shutil
 import numpy as np
 from astropy.io import fits
 from scipy.special import comb
@@ -168,7 +169,11 @@ class FringeFitter:
                 else:
                     sys.exit("Invalid answer. Stopping.")
             else:
-                pass
+                # if directory exists and isn't empty, delete contents to avoid issues 
+                # when rerunning with firstfew!=None 
+                shutil.rmtree(self.oitdir)
+                # remake it
+                os.makedirs(self.oitdir)
         try:
             os.makedirs(self.oifdir)
         except FileExistsError:
