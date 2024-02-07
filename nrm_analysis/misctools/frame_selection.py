@@ -43,7 +43,6 @@ def frame_select(calintsfn, nsigma=1, save_mtfs=True, firstfew=None):
     # maxlist = maxlist[dupes]
     # peak = stats.mode(maxlist).mode
     # find center from median image to be insensitive to CR hits
-    print('ln 45 data.shape',data.shape)
     medimage = np.median(data,axis=0)
     peak = np.where(medimage==medimage.max())
     peak0,peak1 = peak[0],peak[1]

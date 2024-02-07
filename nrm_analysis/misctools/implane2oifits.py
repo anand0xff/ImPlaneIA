@@ -344,7 +344,13 @@ def Plot_observables(tab, vmin=0, vmax=1.1, cmax=180, unit_cp='deg', display=Fal
     else:
         return
 
-
+def rotate_matrix(cov_mat, theta):
+    c, s = np.cos(theta), np.sin(theta)
+    R_mat = [[c, -s],
+             [s, c]]
+    # coordinate rotation from real/imaginary to absolute value/phase (modulus/argument)
+    cv_rotated = np.linalg.multi_dot([np.transpose(R_mat), cov_mat, R_mat])
+    return cv_rotated
 
 def average_observables(nrm, averfunc):
     """ Convert visamp, visphase arrays to complex visibilities arrays for averaging cv's """
@@ -352,7 +358,7 @@ def average_observables(nrm, averfunc):
     """
         input: nrm: ObservablesFromText instance
         input: averfunc: np.median or np.mean should be passed.
-        all angles in radians
+        Incoming angular quantities start in DEGREES, calculations done in RADIANS
         modelled on SAMpip by Joel Sanchez Bermudez (see his reduce_SAM_poly2.py)
 
         Incoming values:
@@ -360,8 +366,7 @@ def average_observables(nrm, averfunc):
         nrm.fa is fringe amplitude
         nrm.fp is fringe phase/radians  """
 
-    to_rd = lambda m, d: m * np.exp(1j * d)  # converts modulus, angle/radians to complex number
-    to_pd = lambda x: (abs(x), np.angle(x))  # converts complex number to modulus, angle/radians 
+    # change "mean" to "avg" in variable names
 
     # put in JSB notation
     nh = nrm.nh
@@ -369,93 +374,94 @@ def average_observables(nrm, averfunc):
     ncp = nrm.ncp
     nca = nrm.nca
 
-    # per JSB
-    data1_visamp = np.zeros([nbl])
-    data1_visamperr = np.zeros([nbl])
-    data1_visphi = np.zeros([nbl])
-    data1_visphierr = np.zeros([nbl])
-    data1_v2 = np.zeros([nbl])
-    data1_v2err = np.zeros([nbl])
-    data1_t3amp = np.zeros([ncp])
-    data1_t3phi = np.zeros([ncp])
-    data1_t3phierr = np.zeros([ncp])
-    data1_t3amperr = np.zeros([ncp])
-    data1_ca = np.zeros([nca])       # Anand added
-    data1_caerror = np.zeros([nca])  # Anand added
+    data_visamp = np.zeros([nbl])
+    data_visamperr = np.zeros([nbl])
+    data_visphi = np.zeros([nbl])
+    data_visphierr = np.zeros([nbl])
+    data_v2 = np.zeros([nbl])
+    data_v2err = np.zeros([nbl])
+    data_t3amp = np.zeros([ncp])
+    data_t3phi = np.zeros([ncp])
+    data_t3phierr = np.zeros([ncp])
+    data_t3amperr = np.zeros([ncp])
+    data_ca = np.zeros([nca])       # Anand added
+    data_caerror = np.zeros([nca])  # Anand added
 
+    # First get nbl averages and stats of complex visibilities
+    cv = nrm.fa * np.exp(1j*np.deg2rad(nrm.fp)) # array shape is [nslices, nbl] # CONVERTED DEG TO RAD HERE
+    cv_mean = averfunc(cv, axis=0) # now there are nbl cv's
 
-
-    # In order to average cv's not phases & amps separately:
-    # convert amplitudes+phases to complex visibilities:
-
-    # First get averages and stats of complex visibilities
-    # put in JSB notation
-    complex_vis = nrm.fa * np.exp(1j*np.radians(nrm.fp)) # array shape is [nslices, nbl] 
-    mean_complex_vis = averfunc(complex_vis, axis = 0) # now there are nbl cv's
-
-    # average each of the nbl CVs over slices (integrations)
-    aver_v_phasor = np.abs((averfunc(complex_vis, axis = 0))), \
-                    np.angle(averfunc(complex_vis, axis = 0))
     # calculate CV stats for each baseline, averaging over slices (integrations)
-    var_v_real = np.var(complex_vis.real, axis= 0) / nbl
-    var_v_im = np.var(complex_vis.imag , axis= 0) / nbl
-    std_v_real = np.std(complex_vis.real, axis= 0) /np.sqrt(nbl)
-    std_v_im = np.std(complex_vis.imag, axis= 0) / np.sqrt(nbl)
-    # 
-    for mm in range(nbl):  # Anand: possible cleanup needed if using medians... TBD
-        cov_mat = [[var_v_real[mm], std_v_real[mm] * std_v_im[mm]], [std_v_real[mm] * std_v_im[mm], var_v_im[mm]]]
-        c = np.cos(aver_v_phasor[1][mm]); s = np.sin(aver_v_phasor[1][mm])
-        RR = [[c, -s], [s, c]]
-        V_rt = np.linalg.multi_dot([np.transpose(RR), cov_mat, RR])
-        data1_visamp[mm] = aver_v_phasor[0][mm]
-        data1_visphi[mm] = aver_v_phasor[1][mm]
-        data1_visphierr[mm] = np.arctan(np.sqrt(V_rt[1, 1]) / aver_v_phasor[0][mm])
-        data1_visamperr[mm] = np.sqrt(V_rt[0, 0])
-        data1_v2[mm] = mean_complex_vis[mm].real ** 2 + mean_complex_vis[mm].imag ** 2 - var_v_real[mm] - var_v_im[mm]
-        data1_v2err[mm] = 2 * data1_v2[mm] * np.sqrt(V_rt[0, 0])
+    cv_real_var = np.var(cv.real, axis=0) / nrm.nslices 
+    cv_im_var = np.var(cv.imag , axis=0) / nrm.nslices
+    # cv_real_std = np.std(cv.real, axis=0) #/ np.sqrt(nrm.nslices)
+    # cv_im_std = np.std(cv.imag, axis=0) #/ np.sqrt(nrm.nslices)
 
-    # lines formerly here copied from JSB were just creating lists of CP indices; we already have this
-    index_cp = nrm.tholes
+    cv_mod_mean = np.abs(cv_mean)
+    cv_arg_mean = np.angle(cv_mean)
 
-    t3_model = np.zeros([complex_vis.shape[0], int(ncp)], dtype=complex)
-    bis_phase = np.zeros([complex_vis.shape[0], int(ncp)])
-    bis_amp = np.zeros([complex_vis.shape[0], int(ncp)])
-    V2_mod = np.zeros([nrm.nslices,nbl]) # Rachel added
-    
-    for ll in range(t3_model.shape[0]):
-        for mm in range(t3_model.shape[1]):
-            t3_model[ll, mm] = complex_vis[ll, index_cp[mm, 0]] * complex_vis[ll, index_cp[mm, 1]] * np.conj(
-            complex_vis[ll, index_cp[mm, 2]])
-            bis_phase[ll,mm] = to_pd(t3_model[ll, mm])[1]
-            bis_amp[ll, mm] = to_pd(t3_model[ll, mm])[0]
+    # calculate average fringe amps and phases, errors, considering covariances
+    fringe_cov_mat_list = []
+    for bl in np.arange(nbl):
+        fringe_cov_mat = np.cov(np.stack((cv.real[:,bl],cv.imag[:,bl]),axis=0))
+        fringe_cov_mat_list.append(fringe_cov_mat)
 
-    aver_bis_phasor = to_pd(np.mean(t3_model, axis=0))
-    var_bis_real = np.var(t3_model.real, axis=0) /V2_mod.shape[0]
-    var_bis_im = np.var(t3_model.imag, axis=0) / V2_mod.shape[0]
-    std_bis_real = np.std(t3_model.real, axis=0) / np.sqrt(V2_mod.shape[0])
-    std_bi_im = np.std(t3_model.imag, axis=0) / np.sqrt(V2_mod.shape[0])
+        # coordinate rotation from real/imaginary to absolute value/phase (modulus/argument)
+        cv_rotated = rotate_matrix(fringe_cov_mat, cv_arg_mean[bl])
+        # print('rotation angle (rad)', bl, cv_arg_mean[bl])
+        data_visamp[bl] = cv_mod_mean[bl]
+        data_visphi[bl] = cv_arg_mean[bl]
 
-    aver_bis_phasor = to_pd(averfunc(t3_model, axis=0))
-    var_bis_real = np.var(t3_model.real, axis=0) /V2_mod.shape[0]
-    var_bis_im = np.var(t3_model.imag, axis=0) / V2_mod.shape[0]
-    std_bis_real = np.std(t3_model.real, axis=0) / np.sqrt(V2_mod.shape[0])
-    std_bi_im = np.std(t3_model.imag, axis=0) / np.sqrt(V2_mod.shape[0])
+        data_visamperr[bl] = np.sqrt(cv_rotated[0, 0])
+        data_visphierr[bl] = np.arctan2(np.sqrt(cv_rotated[1, 1]), cv_mod_mean[bl])
 
-    for mm in range(ncp):
-        cov_mat = [[var_bis_real[mm], std_bis_real[mm] * std_bi_im[mm]], [std_bis_real[mm] * std_bi_im[mm], var_bis_im[mm]]]
-        c = np.cos(aver_bis_phasor[1][mm]); s = np.sin(aver_bis_phasor[1][mm])
-        RR = [[c, -s], [s, c]]
-        V_rt = np.linalg.multi_dot([np.transpose(RR), cov_mat, RR])
-        data1_t3amp[mm] = aver_bis_phasor[0][mm]
-        data1_t3phi[mm] = aver_bis_phasor[1][mm]
-        data1_t3phierr[mm] = np.rad2deg(np.arctan(np.sqrt(V_rt[1, 1]) / aver_bis_phasor[0][mm]))
-        data1_t3amperr[mm] = np.sqrt(V_rt[0, 0])
-    data1_visphi = (data1_visphi + np.pi) % (2 * np.pi) - np.pi # in radians
-    data1_t3phi = (data1_t3phi + np.pi) % (2 * np.pi) - np.pi   # in radians
+        data_v2[bl] = cv_mean[bl].real ** 2 + cv_mean[bl].imag ** 2 - cv_real_var[bl] - cv_im_var[bl]
+        data_v2err[bl] = 2 * data_v2[bl] * np.sqrt(cv_rotated[0, 0])
 
 
-    #      vis2,     e_vis2,      visamp,       e_visamp,        visphi,       e_visphi,        cp,          e_cp,           cpamp,       e_cpamp,
-    return data1_v2, data1_v2err, data1_visamp, data1_visamperr, data1_visphi, data1_visphierr, data1_t3phi, data1_t3phierr, data1_t3amp, data1_t3amperr
+    triple_idx = nrm.tholes
+
+    t3 = np.zeros([cv.shape[0], int(ncp)], dtype=complex)
+    t3_phase = np.zeros([cv.shape[0], int(ncp)])
+    t3_amp = np.zeros([cv.shape[0], int(ncp)])
+
+
+    #for nslc in np.arange(t3.shape[0]): # nslices 
+    for ncp in np.arange(t3.shape[1]): # n closure quantities (35)
+        t3[:, ncp] = (cv[:, triple_idx[ncp, 0]] * 
+                      cv[:, triple_idx[ncp, 1]] * 
+              np.conj(cv[:, triple_idx[ncp, 2]]))
+        t3_amp[:,ncp] = np.abs(t3[:,ncp])
+        t3_phase[:,ncp] = np.angle(t3[:,ncp])
+
+    t3_mean = averfunc(t3, axis=0)
+    t3_mod_mean = np.abs(t3_mean)
+    t3_arg_mean = np.angle(t3_mean)
+
+    t3_real_var = np.var(t3.real, axis=0) / nrm.nslices
+    t3_im_var = np.var(t3.imag, axis=0) / nrm.nslices
+    t3_real_std = np.std(t3.real, axis=0) / np.sqrt(nrm.nslices)
+    t3_im_std = np.std(t3.imag, axis=0) / np.sqrt(nrm.nslices)
+
+    for tri in np.arange(ncp):
+        cov_mat = [[t3_real_var[tri], t3_real_std[tri] * t3_im_std[tri]], 
+                   [t3_real_std[tri] * t3_im_std[tri], t3_im_var[tri]]]
+        c,s = np.cos(t3_arg_mean[tri]), np.sin(t3_arg_mean[tri])
+        R_mat = [[c, -s], 
+                 [s, c]]
+        # coordinate rotation from real/imag axes to amplitude/phase axes in triple product space
+        t3_rotated = np.linalg.multi_dot([np.transpose(R_mat), cov_mat, R_mat])
+        data_t3amp[tri] = t3_mod_mean[tri]
+        data_t3phi[tri] = t3_arg_mean[tri]
+        data_t3amperr[tri] = np.sqrt(t3_rotated[0, 0])
+        data_t3phierr[tri] = np.rad2deg(np.arctan(np.sqrt(t3_rotated[1, 1]) / t3_mod_mean[tri]))
+        
+    data_visphi = np.rad2deg((np.deg2rad(data_visphi) + np.pi) % (2 * np.pi) - np.pi) # in degrees
+    data_t3phi = np.rad2deg(((np.deg2rad(data_t3phi) + np.pi) % (2 * np.pi)) - np.pi)
+
+
+    #      vis2,     e_vis2,      visamp,       e_visamp,        visphi,       e_visphi,        cp,          e_cp,       cpamp,       e_cpamp,
+    return data_v2, data_v2err, data_visamp, data_visamperr, data_visphi, data_visphierr, data_t3phi, data_t3phierr, data_t3amp, data_t3amperr
 
 
     
@@ -826,110 +832,6 @@ def calibrate_oifits(oif_t, oif_c, oifn=None, oifdir=None, **kwargs):
 
     if rfn: return calibrated, os.path.join(oifdir, oifn)
     else: return calibrated
-
-def frame_select(calintsfn, nsigma=1, save_mtfs=True):
-    """
-    Takes a calints file and performs frame selection based on the FT of each integration.
-    Integrations where the sum of the central 9 pixels of the MTF is more than nsigma from the mean
-    are discarded. Returns list of good indices.
-    """
-    with fits.open(calintsfn) as hdu:
-        data = hdu['SCI'].data
-    imsz = data.shape
-    if len(imsz) != 3:
-        raise Exception('Image must be 3d multi-integration (calints file)')
-    maxlist = []
-    for j in range(imsz[0]):
-        maxlist += [np.unravel_index(np.argmax(data[j]), data[j].shape)] 
-    maxlist = np.array(maxlist)
-    xh = min(imsz[1] - stats.mode(maxlist[:, 0]).mode, stats.mode(maxlist[:, 0]).mode - 4) # the bottom 4 rows are reference pixels
-    yh = min(imsz[2] - stats.mode(maxlist[:, 1]).mode, stats.mode(maxlist[:, 1]).mode - 0)
-    sh = min(xh, yh)
-    peak = stats.mode(maxlist).mode
-    peak0,peak1 = peak[0][0],peak[0][1]
-    print('      Cropping all frames to %.0fx%.0f pixels' % (2*sh+1, 2*sh+1))
-    centered_data = data[:,int(peak0-sh):int(peak0+sh+1),int(peak1-sh):int(peak1+sh+1)]
-    # Code adapted from Joel SB's SAMpip
-    mtf_ims = np.zeros_like(centered_data)
-    peaks = np.zeros(imsz[0])
-    for www in range(imsz[0]):
-        im = np.abs(np.fft.fftshift(np.fft.ifft2(centered_data[www,:,:])))
-        mtf_ims[www,:,:] = im
-        ind_peakx, ind_peaky = np.where(im == np.max(im))
-        peaks[www] = np.sum(im[int(ind_peakx-1):int(ind_peakx+2), int(ind_peaky-1):int(ind_peaky+2)])
-    [indx] = np.where((peaks >= np.mean(peaks)-np.std(peaks)*nsigma) & (peaks <= np.mean(peaks)+np.std(peaks)*nsigma))
-    ngood = len(indx)
-    nbad = imsz[0] - ngood
-    print('      %i/%i frames rejected with %.1f sigma threshold' %(nbad,imsz[0],nsigma))
-    if save_mtfs==True:
-        mtf_name = calintsfn.replace('.fits','_mtfs.fits')
-        fits.writeto(mtf_name, mtf_ims, overwrite=True)
-        print('MTFs saved to %s' % mtf_name)
-    return indx
-
-
-def clip_oifits(oifitsfn, good_indices, method='med', suffix=''):
-    """
-    Takes an OIFITS filename and list of good integration indices and outputs
-    updated OIFITS files using only those integrations.
-    TO DO: save mtf peak sums, DC term, constant flux term somewhere in OIFITS header
-    """
-    indir, bn = os.path.split(oifitsfn)
-    nrm_dct = oifits.load(oifitsfn)
-    obsarr = nrm_dct['OI_VIS']['VISAMP'] # for checking observable array shape
-    if suffix == '':
-        suffix = 'trim'
-    if (len(obsarr.shape)==1) | (obsarr.shape[1] == 1):
-        raise Exception('Multi-integration oifits file expected (2d observable arrays)')
-    print('Reading multi-integration OIFITS file...')
-    # arrays to update
-    namedict = {'OI_ARRAY':['PISTONS','PIST_ERR','PISTON_T','PISTON_C'],
-                'OI_VIS':['VISAMP','VISAMPERR','VISPHI','VISPHIERR'],
-                'OI_VIS2':['VIS2DATA','VIS2ERR'],
-                'OI_T3':['T3AMP','T3AMPERR','T3PHI','T3PHIERR']}
-    
-    outdict_multi = copy.deepcopy(nrm_dct)
-    for extname in namedict:
-        for colname in namedict[extname]:
-            try:
-                #print(nrm_dct[extname][colname].shape)
-                outarr = nrm_dct[extname][colname][:,good_indices]
-                # print(extname, colname,nrm_dct[extname][colname].shape,'-->',outarr.shape)
-                outdict_multi[extname][colname] = outarr
-            except KeyError as e: # e.g. different PISTONS keywords present
-                continue
-    multi_outname = bn.replace('.oifits','_%s.oifits'%suffix)
-    oifits.save(outdict_multi, filename=multi_outname, datadir=indir) # this saves the trimmed multi-oifits
-    # save updated averaged oifits too
-    outdict_avg = copy.deepcopy(outdict_multi)
-    # default method in populate_NRM is median combination, apply that here too
-    for extname in namedict:
-        for colname in namedict[extname]:
-            if 'ERR' in colname:
-                # get the corresponding data column
-                datacol = colname.replace('ERR','')
-                if datacol == 'VIS2':
-                    arr = outdict_multi[extname]['VIS2DATA']
-                if datacol == 'PIST_': # handle different PISTONS keyword present, again
-                    for eee in ['PISTONS','PISTON_T','PISTON_C']:
-                        try:
-                            arr = outdict_multi[extname][eee]
-                        except KeyError:
-                            continue
-                outarr = np.std(arr, axis=1)
-            else:
-                try:
-                    arr = outdict_multi[extname][colname]
-                except KeyError:
-                    continue
-                if method=='med':
-                    outarr = np.median(arr, axis=1)
-                else:
-                    outarr = np.mean(arr, axis=1)
-            outdict_avg[extname][colname] = outarr
-
-    avg_outname = bn.replace('multi_','').replace('.oifits','_%s.oifits'%suffix)
-    oifits.save(outdict_avg,filename=avg_outname,datadir=indir)
 
 
 
