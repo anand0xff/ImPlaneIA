@@ -352,6 +352,58 @@ def rotate_matrix(cov_mat, theta):
     cv_rotated = np.linalg.multi_dot([np.transpose(R_mat), cov_mat, R_mat])
     return cv_rotated
 
+def average_observables2(nrm, averfunc):
+""" Convert visamp, visphase arrays to complex visibilities arrays for averaging cv's
+    Calculate covariance matrices between fringe amplitudes and fringe phases, 
+    and between closure amplutides and closure phases (as well as variance of each).
+    Convert r, theta (modulus, phase) to x,y. Calculate cov(x,y). Rotate resulting
+    2x2 matrix back to r, theta. 
+
+    https://www.probabilitycourse.com/chapter5/5_3_1_covariance_correlation.php
+
+     """
+
+    """
+        input: nrm: ObservablesFromText instance
+        input: averfunc: np.median or np.mean should be passed.
+        Incoming angular quantities start in DEGREES, calculations done in RADIANS
+
+        Incoming values:
+        nrm.nh is number of holes 
+        nrm.fa is fringe amplitude
+        nrm.fp is fringe phase/radians
+    """
+    nrm.ca = np.ones(nrm.ca.shape) # for now
+    # loop over 21 baselines
+    cov_mat_fringes = []
+    for bl in nrm.nbl:
+        fringeamps = nrm.fa[:,bl]
+        fringephases = nrm.fp[:,bl]
+        covmat = cov_r_theta(fringeamps, fringephases)
+        cov_mat_fringes.append(covmat)
+
+    cov_mat_triples = []
+    for triple in nrm.ncp:
+        tripamp = nrm.ca[:,triple] # CAs are NOT triple product amplitudes
+        triphase = nrm.cp[:,triple]
+        covmat = cov_r_theta(tripamp, triphase)
+        cov_mat_triples.append(covmat)
+
+    print(cov_mat_fringes[0])
+
+
+def cov_r_theta(rr, theta):
+    """
+    rr: complex number modulus, array 
+    theta: complex number phase, array
+    """
+    xx = rr * np.cos(theta)
+    yy = rr * np.sin(theta)
+    cov_mat_xy = np.cov(xx, yy)
+    cov_mat_r_theta = rotate_matrix(cov_mat_xy, theta)
+    return cov_mat_r_theta
+
+
 def average_observables(nrm, averfunc):
     """ Convert visamp, visphase arrays to complex visibilities arrays for averaging cv's """
 
@@ -484,7 +536,7 @@ def populate_NRM(nrm_t, method='med'):
     visphi_in = nrm_t.fp
     vis2_in = visamp_in**2
     cp_in = nrm_t.cp
-    cpamp_in = nrm_t.ca
+    cpamp_in = nrm_t.ca # WRONG, these are not triple product amplitudes
     pistons_in = nrm_t.pistons
 
     if method == 'multi': # no averaging
