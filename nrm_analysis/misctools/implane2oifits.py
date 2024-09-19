@@ -40,7 +40,7 @@ class ObservablesFromText():
 
     def __init__(self, nh, txtpath=None,
                  oifpath=None,
-                 observables=("phases", "amplitudes", "CPs", "CAs", "fringepistons"),
+                 observables=("phases", "amplitudes", "CPs", "t3amps", "CAs", "q4phases", "fringepistons"),
                  oifinfofn='info4oif_dict.pkl',
                  angunit="radians",
                  verbose=True):
@@ -68,7 +68,8 @@ class ObservablesFromText():
             If you want to trim low and/or high ends of eg IFU spectral observables trim them
             on-the-fly before calling this routine.
 
-            ImPlaneIA saves fp cp in RADIANS.  Here we convert to DEGREES when writing to all OIFITS output from implaneia - 2020.10.18
+            ImPlaneIA saves fp cp in RADIANS.  Here we convert to DEGREES immediately on reading in txt files,
+            so all OIFITS output from implaneia is saved in DEGREES - 2020.10.18
 
             Units: as SI as possible.
 
@@ -100,7 +101,9 @@ class ObservablesFromText():
         self.fa = np.zeros((self.nslices, self.nbl))
         self.cp = np.zeros((self.nslices, self.ncp))
         if len(self.observables) > 3:
+            self.t3amp = np.zeros((self.nslices, self.ncp))
             self.ca = np.zeros((self.nslices, self.nca))
+            self.q4phi = np.zeros((self.nslices, self.nca))
             self.pistons = np.zeros((self.nslices, self.nh))
         self.angunit = angunit
         if verbose:
@@ -254,8 +257,11 @@ class ObservablesFromText():
             self.cp[slice:] = np.rad2deg(np.loadtxt(fnheads[2].format(slice)))# * 180.0 / np.pi
             # Do the same to-degrees conversion with segment phases when we get to them!
             if len(self.observables) > 3: # expecting CAs, fringepistons
-                self.ca[slice:] = np.loadtxt(fnheads[3].format(slice))
-                self.pistons[slice:] = np.rad2deg(np.loadtxt(fnheads[4].format(slice)))  # segment pistons in deg
+                self.t3amp[slice:] = np.loadtxt(fnheads[3].format(slice)) # triple product amplitudes
+                self.ca[slice:] = np.loadtxt(fnheads[4].format(slice)) # closure (quad) amplitudes
+                self.q4phi[slice:] = np.rad2deg(np.loadtxt(fnheads[5].format(slice))) # quad phases in deg
+                self.pistons[slice:] = np.rad2deg(np.loadtxt(fnheads[6].format(slice)))  # segment pistons in deg
+
         # read in pickle of the info oifits might need...
         pfd = open(self.txtpath+'/'+self.oifinfofn, 'rb')
         self.info4oif_dict = pickle.load(pfd)
@@ -353,7 +359,8 @@ def rotate_matrix(cov_mat, theta):
     return cv_rotated
 
 def average_observables2(nrm, averfunc):
-""" Convert visamp, visphase arrays to complex visibilities arrays for averaging cv's
+    """ 
+    Convert visamp, visphase arrays to complex visibilities arrays for averaging cv's
     Calculate covariance matrices between fringe amplitudes and fringe phases, 
     and between closure amplutides and closure phases (as well as variance of each).
     Convert r, theta (modulus, phase) to x,y. Calculate cov(x,y). Rotate resulting
@@ -366,41 +373,69 @@ def average_observables2(nrm, averfunc):
     """
         input: nrm: ObservablesFromText instance
         input: averfunc: np.median or np.mean should be passed.
-        Incoming angular quantities start in DEGREES, calculations done in RADIANS
+        Incoming angular quantities start in DEGREES, calculations should be done in RADIANS
 
         Incoming values:
         nrm.nh is number of holes 
         nrm.fa is fringe amplitude
-        nrm.fp is fringe phase/radians
+        nrm.fp is fringe phase /deg
+        nrm.cp is closure phases /deg
+        nrm.t3amp is triple product amplitudes
+        nrm.q4phi is quad phases /deg
     """
-    nrm.ca = np.ones(nrm.ca.shape) # for now
+    # we still need to set up empty arrays for all observables and then populate them?
+    # are we sigma-clipping the averages?
+    # are we averaging complex numbers or not?
+
+    avg_fa = averfunc(nrm.fa, axis=0)
+    avg_fp = averfunc(nrm.fp, axis=0)
+    
+    # WIP
+
+def observable_covariances(nrm):
+    """
+    input: nrm: ObservablesFromText instance
+    """
     # loop over 21 baselines
     cov_mat_fringes = []
-    for bl in nrm.nbl:
+    # these currently operate on all slices. other one operated on already-averaged slices
+    for bl in np.arange(nrm.nbl):
         fringeamps = nrm.fa[:,bl]
         fringephases = nrm.fp[:,bl]
-        covmat = cov_r_theta(fringeamps, fringephases)
+        covmat = cov_r_theta(fringeamps, fringephases, averfunc)
         cov_mat_fringes.append(covmat)
 
     cov_mat_triples = []
-    for triple in nrm.ncp:
-        tripamp = nrm.ca[:,triple] # CAs are NOT triple product amplitudes
+    for triple in np.arange(nrm.ncp):
+        tripamp = nrm.t3amp[:,triple]
         triphase = nrm.cp[:,triple]
-        covmat = cov_r_theta(tripamp, triphase)
+        covmat = cov_r_theta(tripamp, triphase, averfunc)
         cov_mat_triples.append(covmat)
 
-    print(cov_mat_fringes[0])
+    cov_mat_quads = []
+    for quad in np.arange(nrm.nca):
+        quadamp = nrm.ca[:,quad]
+        quadphase = nrm.quadphase[:,quad]
+        covmat = cov_r_theta(quadamp, quadphase, averfunc)
+        cov_mat_quads.append(covmat)
+
+    # covmats to be written to oifits. store in nrm object?
+
+    return np.array(cov_mat_fringes), np.array(cov_mat_triples), np.array(cov_mat_quads)
 
 
-def cov_r_theta(rr, theta):
+def cov_r_theta(rr, theta, averfunc):
     """
     rr: complex number modulus, array 
     theta: complex number phase, array
+    averfunc: np.median or np.mean
     """
     xx = rr * np.cos(theta)
     yy = rr * np.sin(theta)
     cov_mat_xy = np.cov(xx, yy)
-    cov_mat_r_theta = rotate_matrix(cov_mat_xy, theta)
+    # print('cov mat shape', cov_mat_xy.shape)
+    # print('theta shape', theta.shape)
+    cov_mat_r_theta = rotate_matrix(cov_mat_xy, averfunc(theta))
     return cov_mat_r_theta
 
 
@@ -536,7 +571,9 @@ def populate_NRM(nrm_t, method='med'):
     visphi_in = nrm_t.fp
     vis2_in = visamp_in**2
     cp_in = nrm_t.cp
-    cpamp_in = nrm_t.ca # WRONG, these are not triple product amplitudes
+    t3amp_in = nrm_t.t3amp
+    ca_in = nrm_t.ca
+    q4phi_in = nrm_t.q4phi
     pistons_in = nrm_t.pistons
 
     if method == 'multi': # no averaging
@@ -548,16 +585,22 @@ def populate_NRM(nrm_t, method='med'):
         e_visphi = np.zeros(visphi.shape)
         cp = cp_in.T
         e_cp = np.zeros(cp.shape)
-        cpamp = cpamp_in.T
-        e_cpamp = np.zeros(cpamp.shape)
+        t3amp = t3amp_in.T
+        e_t3amp = np.zeros(t3amp.shape)
+        ca = ca_in.T
+        e_ca = np.zeros(ca.shape)
+        q4phi = q4phi_in.T
+        e_q4phi = np.zeros(q4phi.shape)
         pist = pistons_in.T
         e_pist = np.zeros(pist.shape)
     elif method == 'med': # average over complex quantities
-        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, cpamp, e_cpamp =  average_observables(nrm_t, np.median) 
+        #vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, cpamp, e_cpamp =  average_observables(nrm_t, np.median)
+        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, t3amp, e_t3amp, ca, e_ca, q4phi, e_q4phi =  average_observables2(nrm_t, np.median)
         pist = np.median(pistons_in, axis=0)
         e_pist = np.std(pistons_in, axis=0)
     else: # average over complex quantities
-        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, cpamp, e_cpamp =  average_observables(nrm_t, np.mean) 
+        #vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, cpamp, e_cpamp =  average_observables(nrm_t, np.mean)
+        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, t3amp, e_t3amp, ca, e_ca, q4phi, e_q4phi =  average_observables2(nrm_t, np.mean) 
         pist = np.mean(pistons_in, axis=0)
         e_pist = np.std(pistons_in, axis=0)
 
@@ -570,8 +613,12 @@ def populate_NRM(nrm_t, method='med'):
               'e_visphi': e_visphi,
               'cp': cp,
               'e_cp': e_cp,
-              'cpamp': cpamp,
-              'e_cpamp': e_cpamp,
+              't3amp': t3amp,
+              'e_t3amp': e_t3amp,
+              'ca': ca,
+              'e_ca': e_ca,
+              'q4phi': q4phi,
+              'e_q4phi': e_q4phi
               'pist': pist,
               'e_pist': e_pist
               }
@@ -673,8 +720,8 @@ def observable2dict(nrm, multi=False, display=False):
                      'INT_TIME': info4oif['itime'],
                      'T3PHI': nrmd2c.cp,
                      'T3PHIERR': nrmd2c.e_cp,
-                     'T3AMP': nrmd2c.cpamp,
-                     'T3AMPERR': nrmd2c.e_cpamp,
+                     'T3AMP': nrmd2c.t3amp,
+                     'T3AMPERR': nrmd2c.e_t3amp,
                      'U1COORD': u1coord,
                      'V1COORD': v1coord,
                      'U2COORD': u2coord,
@@ -682,6 +729,25 @@ def observable2dict(nrm, multi=False, display=False):
                      'STA_INDEX': nrm.tholes,
                      'FLAG': flagT3,
                      'BL': bl_cp
+                     },
+
+            'OI_Q4': {'TARGET_ID': 1,
+                     'TIME': 0,
+                     'MJD': t.mjd,
+                     'INT_TIME': info4oif['itime'],
+                     'Q4PHI': nrmd2c.q4phi,
+                     'Q4PHIERR': nrmd2c.e_q4phi,
+                     'CA': nrmd2c.ca,
+                     'CAERR': nrmd2c.e_ca,
+                     'U1COORD': u1coord,
+                     'V1COORD': v1coord,
+                     'U2COORD': u2coord,
+                     'V2COORD': v2coord,
+                     'U3COORD': u3coord,
+                     'V3COORD': v3coord,
+                     'STA_INDEX': nrm.tholes,
+                     'FLAG': flagT3,
+                     'BL': bl_cp # ??? get longest of quad baselines?
                      },
 
            'OI_WAVELENGTH': {'EFF_WAVE': wl,

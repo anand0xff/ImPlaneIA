@@ -263,7 +263,11 @@ class FringeFitter:
         np.savetxt(self.oitdir+self.instrument_data.rootfn + \
                    "/CPs_{0:02d}.txt".format(slc), nrm.redundant_cps)
         np.savetxt(self.oitdir+self.instrument_data.rootfn + \
+                    "/t3amps_{0:02d}.txt".format(slc), nrm.t3_amplitudes) # RC 8/24
+        np.savetxt(self.oitdir+self.instrument_data.rootfn + \
                    "/CAs_{0:02d}.txt".format(slc), nrm.redundant_cas)
+        np.savetxt(self.oitdir+self.instrument_data.rootfn + \
+                   "/q4phases_{0:02d}.txt".format(slc), nrm.q4_phases) # RC 8/24
         np.savetxt(self.oitdir+self.instrument_data.rootfn + \
                   "/fringepistons_{0:02d}.txt".format(slc), nrm.fringepistons)
 
@@ -410,7 +414,9 @@ def fit_fringes_single_integration(args):
     fringephase     --- baseline phases in radians
     fringeamp       --- baseline amplitudes (flux normalized)
     redundant_cps   --- closure phases in radians
+    t3_amplitudes   --- triple product amplitudes
     redundant_cas   --- closure amplitudes
+    q4_phases       --- quad sum phases in radians
     residual        --- fit residuals [data - model solution]
     cond            --- matrix condition for inversion
     fringepistons   --- zero-mean piston opd in radians on each hole (eigenphases)
