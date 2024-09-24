@@ -8,6 +8,7 @@ import os, sys
 import pickle
 import scipy
 from scipy.special import comb
+from scipy.integrate import simpson
 import time
 import nrm_analysis.misctools.matrixDFT as matrixDFT
 import matplotlib.pyplot as plt
@@ -1186,11 +1187,10 @@ def get_cw_beta(bandpass):
     Bandpass: array where the columns are weights, wavelengths
     Return weighted mean wavelength in meters, fractional bandpass
     """
-    from scipy.integrate import simps
     wt = bandpass[:,0]
     wl = bandpass[:,1]
     cw = (wl*wt).sum()/wt.sum() # Weighted mean wavelength in meters "central wavelength"
-    area = simps(wt, wl)
+    area = simpson(wt, x=wl)
     ew = area / wt.max() # equivalent width
     beta = ew/cw # fractional bandpass
     return cw, beta

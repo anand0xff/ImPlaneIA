@@ -18,6 +18,7 @@ import pickle
 import numpy as np
 from astropy.time.core import Time
 from astropy.io import fits
+from astropy.stats import sigma_clipped_stats
 from matplotlib import pyplot as plt
 from munch import munchify as dict2class
 from scipy.special import comb
@@ -27,6 +28,7 @@ import copy
 from itertools import combinations
 
 import nrm_analysis.misctools.oifits as oifits
+from nrm_analysis.fringefitting import leastsqnrm
 
 
 
@@ -252,15 +254,15 @@ class ObservablesFromText():
         # load from text into data arrays:
         for slice in range(self.nslices):
             # Sydney oifits prefers degrees 2020.10.17
-            self.fp[slice:] = np.rad2deg(np.loadtxt(fnheads[0].format(slice)))# * 180.0 / np.pi
+            # dont convert to degrees yet because rotations expect radians!
+            self.fp[slice:] = np.loadtxt(fnheads[0].format(slice))# * 180.0 / np.pi
             self.fa[slice:] = np.loadtxt(fnheads[1].format(slice))
-            self.cp[slice:] = np.rad2deg(np.loadtxt(fnheads[2].format(slice)))# * 180.0 / np.pi
-            # Do the same to-degrees conversion with segment phases when we get to them!
+            self.cp[slice:] = np.loadtxt(fnheads[2].format(slice))# * 180.0 / np.pi
             if len(self.observables) > 3: # expecting CAs, fringepistons
                 self.t3amp[slice:] = np.loadtxt(fnheads[3].format(slice)) # triple product amplitudes
                 self.ca[slice:] = np.loadtxt(fnheads[4].format(slice)) # closure (quad) amplitudes
-                self.q4phi[slice:] = np.rad2deg(np.loadtxt(fnheads[5].format(slice))) # quad phases in deg
-                self.pistons[slice:] = np.rad2deg(np.loadtxt(fnheads[6].format(slice)))  # segment pistons in deg
+                self.q4phi[slice:] = np.loadtxt(fnheads[5].format(slice)) # quad phases in rad
+                self.pistons[slice:] = np.loadtxt(fnheads[6].format(slice))  # segment pistons in rad
 
         # read in pickle of the info oifits might need...
         pfd = open(self.txtpath+'/'+self.oifinfofn, 'rb')
@@ -358,7 +360,7 @@ def rotate_matrix(cov_mat, theta):
     cv_rotated = np.linalg.multi_dot([np.transpose(R_mat), cov_mat, R_mat])
     return cv_rotated
 
-def average_observables2(nrm, averfunc):
+def average_observables(nrm, averfunc):
     """ 
     Convert visamp, visphase arrays to complex visibilities arrays for averaging cv's
     Calculate covariance matrices between fringe amplitudes and fringe phases, 
@@ -373,54 +375,89 @@ def average_observables2(nrm, averfunc):
     """
         input: nrm: ObservablesFromText instance
         input: averfunc: np.median or np.mean should be passed.
-        Incoming angular quantities start in DEGREES, calculations should be done in RADIANS
+        Incoming angular quantities are now in RADIANS. Convert to DEGREES before returning
 
         Incoming values:
         nrm.nh is number of holes 
-        nrm.fa is fringe amplitude
-        nrm.fp is fringe phase /deg
-        nrm.cp is closure phases /deg
+        nrm.fa is fringe amplitudes
+        nrm.fp is fringe phases /rad
+        nrm.cp is closure phases /rad
         nrm.t3amp is triple product amplitudes
-        nrm.q4phi is quad phases /deg
+        nrm.q4phi is quad phases /rad
+        nrm.ca is quad amplitude (closure amp)
+        nrm.pistons is segment pistons /rad
     """
-    # we still need to set up empty arrays for all observables and then populate them?
-    # are we sigma-clipping the averages?
-    # are we averaging complex numbers or not?
+    # sigma-clip the averages
+    # sigma_clipped_stats returns mean, median, stddev. (nsigma=3, niters=5)
+    # errors are sqrt of relevant diagonal element (variance) of covariance matrix
+    # Handle pistons here too, so all averaging done in the same place
 
-    avg_fa = averfunc(nrm.fa, axis=0)
-    avg_fp = averfunc(nrm.fp, axis=0)
+    covmats_fringes, covmats_triples, covmats_quads = observable_covariances(nrm, averfunc)
+
+    if averfunc == np.median:
+        _, avg_fa, std_fa = sigma_clipped_stats(nrm.fa, axis=0)  # 21. std_fa is just for comparing to covariance
+        _, avg_fp, std_fp  = sigma_clipped_stats(nrm.fp, axis=0)  # 21
+        _, avg_sqv, err_sqv = sigma_clipped_stats(nrm.fa**2, axis=0)
+        _, avg_pist, err_pist = sigma_clipped_stats(nrm.pistons, axis=0)
+    else:  # mean
+        avg_fa, _, std_fa = sigma_clipped_stats(nrm.fa, axis=0)
+        avg_fp, _, std_fp = sigma_clipped_stats(nrm.fp, axis=0)
+        avg_sqv, _, err_sqv = sigma_clipped_stats(nrm.fa**2, axis=0)
+        avg_pist, _, err_pist = sigma_clipped_stats(nrm.pistons, axis=0)
     
-    # WIP
+    err_fa, err_fp = err_from_covmat(covmats_fringes)
 
-def observable_covariances(nrm):
+    # calculate triple and quad quantities from **averaged** fringe amps and phases
+    avg_t3amp = leastsqnrm.t3_amplitudes(avg_fa, N=nrm.nh)
+    avg_cp = leastsqnrm.redundant_cps(avg_fp, N=nrm.nh)
+    err_t3amp, err_cp = err_from_covmat(covmats_triples)
+    
+    avg_ca = leastsqnrm.return_CAs(avg_fa, N=nrm.nh)
+    avg_q4phi = leastsqnrm.q4_phases(avg_fp, N=nrm.nh)
+    err_ca, err_q4phi = err_from_covmat(covmats_quads)
+
+    return avg_sqv, err_sqv, avg_fa, err_fa, avg_fp, err_fp, avg_cp, err_cp, avg_t3amp, err_t3amp, avg_ca, err_ca, avg_q4phi, err_q4phi, avg_pist, err_pist
+
+def err_from_covmat(covmatlist):
+    """
+    Return sqrt of [0,0] and [1,1] elements of each of a list of covariance matrices,
+    for use as observable errors.
+    """
+    err_00 = np.sqrt(np.array([covmat[0,0] for covmat in covmatlist]))
+    err_11 = np.sqrt(np.array([covmat[1,1] for covmat in covmatlist]))
+
+    return err_00, err_11
+
+def observable_covariances(nrm, averfunc):
     """
     input: nrm: ObservablesFromText instance
     """
     # loop over 21 baselines
     cov_mat_fringes = []
-    # these currently operate on all slices. other one operated on already-averaged slices
+    # these currently operate on all slices at once. other one operated on already-averaged slices
     for bl in np.arange(nrm.nbl):
         fringeamps = nrm.fa[:,bl]
         fringephases = nrm.fp[:,bl]
         covmat = cov_r_theta(fringeamps, fringephases, averfunc)
         cov_mat_fringes.append(covmat)
-
+    # loop over 35 triples
     cov_mat_triples = []
     for triple in np.arange(nrm.ncp):
         tripamp = nrm.t3amp[:,triple]
         triphase = nrm.cp[:,triple]
         covmat = cov_r_theta(tripamp, triphase, averfunc)
         cov_mat_triples.append(covmat)
-
+    # loop over 35 quads
     cov_mat_quads = []
     for quad in np.arange(nrm.nca):
         quadamp = nrm.ca[:,quad]
-        quadphase = nrm.quadphase[:,quad]
+        quadphase = nrm.q4phi[:,quad]
         covmat = cov_r_theta(quadamp, quadphase, averfunc)
         cov_mat_quads.append(covmat)
 
     # covmats to be written to oifits. store in nrm object?
-
+    # store entire matrix... somewhere
+    # lists of cov mats have shape e.g. (21, 2, 2) or (35, 2, 2)
     return np.array(cov_mat_fringes), np.array(cov_mat_triples), np.array(cov_mat_quads)
 
 
@@ -429,6 +466,7 @@ def cov_r_theta(rr, theta, averfunc):
     rr: complex number modulus, array 
     theta: complex number phase, array
     averfunc: np.median or np.mean
+    rotating by **average** phase (over integrations)
     """
     xx = rr * np.cos(theta)
     yy = rr * np.sin(theta)
@@ -438,133 +476,20 @@ def cov_r_theta(rr, theta, averfunc):
     cov_mat_r_theta = rotate_matrix(cov_mat_xy, averfunc(theta))
     return cov_mat_r_theta
 
-
-def average_observables(nrm, averfunc):
-    """ Convert visamp, visphase arrays to complex visibilities arrays for averaging cv's """
-
-    """
-        input: nrm: ObservablesFromText instance
-        input: averfunc: np.median or np.mean should be passed.
-        Incoming angular quantities start in DEGREES, calculations done in RADIANS
-        modelled on SAMpip by Joel Sanchez Bermudez (see his reduce_SAM_poly2.py)
-
-        Incoming values:
-        nrm.nh is number of holes 
-        nrm.fa is fringe amplitude
-        nrm.fp is fringe phase/radians  """
-
-    # change "mean" to "avg" in variable names
-
-    # put in JSB notation
-    nh = nrm.nh
-    nbl = nrm.nbl
-    ncp = nrm.ncp
-    nca = nrm.nca
-
-    data_visamp = np.zeros([nbl])
-    data_visamperr = np.zeros([nbl])
-    data_visphi = np.zeros([nbl])
-    data_visphierr = np.zeros([nbl])
-    data_v2 = np.zeros([nbl])
-    data_v2err = np.zeros([nbl])
-    data_t3amp = np.zeros([ncp])
-    data_t3phi = np.zeros([ncp])
-    data_t3phierr = np.zeros([ncp])
-    data_t3amperr = np.zeros([ncp])
-    data_ca = np.zeros([nca])       # Anand added
-    data_caerror = np.zeros([nca])  # Anand added
-
-    # First get nbl averages and stats of complex visibilities
-    cv = nrm.fa * np.exp(1j*np.deg2rad(nrm.fp)) # array shape is [nslices, nbl] # CONVERTED DEG TO RAD HERE
-    cv_mean = averfunc(cv, axis=0) # now there are nbl cv's
-
-    # calculate CV stats for each baseline, averaging over slices (integrations)
-    cv_real_var = np.var(cv.real, axis=0) / nrm.nslices 
-    cv_im_var = np.var(cv.imag , axis=0) / nrm.nslices
-    # cv_real_std = np.std(cv.real, axis=0) #/ np.sqrt(nrm.nslices)
-    # cv_im_std = np.std(cv.imag, axis=0) #/ np.sqrt(nrm.nslices)
-
-    cv_mod_mean = np.abs(cv_mean)
-    cv_arg_mean = np.angle(cv_mean)
-
-    # calculate average fringe amps and phases, errors, considering covariances
-    fringe_cov_mat_list = []
-    for bl in np.arange(nbl):
-        fringe_cov_mat = np.cov(np.stack((cv.real[:,bl],cv.imag[:,bl]),axis=0))
-        fringe_cov_mat_list.append(fringe_cov_mat)
-
-        # coordinate rotation from real/imaginary to absolute value/phase (modulus/argument)
-        cv_rotated = rotate_matrix(fringe_cov_mat, cv_arg_mean[bl])
-        # print('rotation angle (rad)', bl, cv_arg_mean[bl])
-        data_visamp[bl] = cv_mod_mean[bl]
-        data_visphi[bl] = cv_arg_mean[bl]
-
-        data_visamperr[bl] = np.sqrt(cv_rotated[0, 0])
-        data_visphierr[bl] = np.arctan2(np.sqrt(cv_rotated[1, 1]), cv_mod_mean[bl])
-
-        data_v2[bl] = cv_mean[bl].real ** 2 + cv_mean[bl].imag ** 2 - cv_real_var[bl] - cv_im_var[bl]
-        data_v2err[bl] = 2 * data_v2[bl] * np.sqrt(cv_rotated[0, 0])
-
-
-    triple_idx = nrm.tholes
-
-    t3 = np.zeros([cv.shape[0], int(ncp)], dtype=complex)
-    t3_phase = np.zeros([cv.shape[0], int(ncp)])
-    t3_amp = np.zeros([cv.shape[0], int(ncp)])
-
-
-    #for nslc in np.arange(t3.shape[0]): # nslices 
-    for ncp in np.arange(t3.shape[1]): # n closure quantities (35)
-        t3[:, ncp] = (cv[:, triple_idx[ncp, 0]] * 
-                      cv[:, triple_idx[ncp, 1]] * 
-              np.conj(cv[:, triple_idx[ncp, 2]]))
-        t3_amp[:,ncp] = np.abs(t3[:,ncp])
-        t3_phase[:,ncp] = np.angle(t3[:,ncp])
-
-    t3_mean = averfunc(t3, axis=0)
-    t3_mod_mean = np.abs(t3_mean)
-    t3_arg_mean = np.angle(t3_mean)
-
-    t3_real_var = np.var(t3.real, axis=0) / nrm.nslices
-    t3_im_var = np.var(t3.imag, axis=0) / nrm.nslices
-    t3_real_std = np.std(t3.real, axis=0) / np.sqrt(nrm.nslices)
-    t3_im_std = np.std(t3.imag, axis=0) / np.sqrt(nrm.nslices)
-
-    for tri in np.arange(ncp):
-        cov_mat = [[t3_real_var[tri], t3_real_std[tri] * t3_im_std[tri]], 
-                   [t3_real_std[tri] * t3_im_std[tri], t3_im_var[tri]]]
-        c,s = np.cos(t3_arg_mean[tri]), np.sin(t3_arg_mean[tri])
-        R_mat = [[c, -s], 
-                 [s, c]]
-        # coordinate rotation from real/imag axes to amplitude/phase axes in triple product space
-        t3_rotated = np.linalg.multi_dot([np.transpose(R_mat), cov_mat, R_mat])
-        data_t3amp[tri] = t3_mod_mean[tri]
-        data_t3phi[tri] = t3_arg_mean[tri]
-        data_t3amperr[tri] = np.sqrt(t3_rotated[0, 0])
-        data_t3phierr[tri] = np.rad2deg(np.arctan(np.sqrt(t3_rotated[1, 1]) / t3_mod_mean[tri]))
-        
-    data_visphi = np.rad2deg((np.deg2rad(data_visphi) + np.pi) % (2 * np.pi) - np.pi) # in degrees
-    data_t3phi = np.rad2deg(((np.deg2rad(data_t3phi) + np.pi) % (2 * np.pi)) - np.pi)
-
-
-    #      vis2,     e_vis2,      visamp,       e_visamp,        visphi,       e_visphi,        cp,          e_cp,       cpamp,       e_cpamp,
-    return data_v2, data_v2err, data_visamp, data_visamperr, data_visphi, data_visphierr, data_t3phi, data_t3phierr, data_t3amp, data_t3amperr
-
-
     
 def populate_NRM(nrm_t, method='med'):
     """ 
     modelled on calib_NRM() but no calibration done because it's for a single object.
     Instead it just populates the appropriate dictionary.  
     So nomenclature looks funny with _5, etc., 
-    Funny-looking clumsy straight handoffs to internal variable nmaes,...
+    Funny-looking clumsy straight handoffs to internal variable names,...
     # RAC 3/3021
     If method='multi', preserve observables in each slice (integration) in the output class.
     Multi-slice observable arrays will have read-in shape (len(observable),nslices).
     Errors of multi-slice observables will be all zero (for now)
     Otherwise, take median or mean (assumed if method not 'med' or 'multi').
 
-    nrm_t has angles in radians.  Convert to complex visibilities for averaging.
+    nrm_t has angles in radians. Convert to degrees here for writing to OIFITS
 
     """
     visamp_in = nrm_t.fa
@@ -593,35 +518,31 @@ def populate_NRM(nrm_t, method='med'):
         e_q4phi = np.zeros(q4phi.shape)
         pist = pistons_in.T
         e_pist = np.zeros(pist.shape)
-    elif method == 'med': # average over complex quantities
-        #vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, cpamp, e_cpamp =  average_observables(nrm_t, np.median)
-        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, t3amp, e_t3amp, ca, e_ca, q4phi, e_q4phi =  average_observables2(nrm_t, np.median)
-        pist = np.median(pistons_in, axis=0)
-        e_pist = np.std(pistons_in, axis=0)
-    else: # average over complex quantities
-        #vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, cpamp, e_cpamp =  average_observables(nrm_t, np.mean)
-        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, t3amp, e_t3amp, ca, e_ca, q4phi, e_q4phi =  average_observables2(nrm_t, np.mean) 
-        pist = np.mean(pistons_in, axis=0)
-        e_pist = np.std(pistons_in, axis=0)
+    elif method == 'med':
+        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, t3amp, e_t3amp, ca, e_ca, q4phi, e_q4phi, pist, e_pist =  average_observables(nrm_t, np.median)
+    else:
+        vis2, e_vis2, visamp, e_visamp, visphi, e_visphi, cp, e_cp, t3amp, e_t3amp, ca, e_ca, q4phi, e_q4phi, pist, e_pist =  average_observables(nrm_t, np.mean) 
 
-
+    # convert angular quantities to degrees now
     output = {'vis2': vis2,
               'e_vis2': e_vis2,
               'visamp': visamp,
               'e_visamp': e_visamp,
-              'visphi': visphi,
-              'e_visphi': e_visphi,
-              'cp': cp,
-              'e_cp': e_cp,
+              'visphi': np.rad2deg(visphi),
+              'e_visphi': np.rad2deg(e_visphi),
+              'cp': np.rad2deg(cp),
+              'e_cp': np.rad2deg(e_cp),
               't3amp': t3amp,
               'e_t3amp': e_t3amp,
               'ca': ca,
               'e_ca': e_ca,
-              'q4phi': q4phi,
-              'e_q4phi': e_q4phi
-              'pist': pist,
-              'e_pist': e_pist
+              'q4phi': np.rad2deg(q4phi),
+              'e_q4phi': np.rad2deg(e_q4phi),
+              'pist': np.rad2deg(pist),
+              'e_pist': np.rad2deg(e_pist)
               }
+
+    print('debug:',np.rad2deg(visphi))
 
     return dict2class(output)
 

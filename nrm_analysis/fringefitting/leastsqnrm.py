@@ -406,7 +406,7 @@ def phases_and_amplitudes(solution_coefficients, N=7):
 
     return fringephase, fringeamp, redundant_closure_phases, redundant_closure_amplitudes
 
-def t3_amplitudes(amps, n=7)  # RC 8/24
+def t3_amplitudes(amps, N=7):  # RC 8/24
     """
     Populate the triple-product amplitude array
     (NOT closure amplitudes)
@@ -425,14 +425,14 @@ def t3_amplitudes(amps, n=7)  # RC 8/24
         triple product amplitude array
     """
 
-    arr = populate_symmamparray(amps, n=n)
+    arr = populate_symmamparray(amps, N=N)
 
-    cpamps = np.zeros(int(comb(n, 3)))
+    cpamps = np.zeros(int(comb(N, 3)))
 
     nn = 0
-    for kk in range(n - 2):
-        for ii in range(n - kk - 2):
-            for jj in range(n - kk - ii - 2):
+    for kk in range(N - 2):
+        for ii in range(N - kk - 2):
+            for jj in range(N - kk - ii - 2):
                 cpamps[nn + jj] = (
                     arr[kk, ii + kk + 1]
                     * arr[ii + kk + 1, jj + ii + kk + 2]
@@ -443,7 +443,7 @@ def t3_amplitudes(amps, n=7)  # RC 8/24
 
     return cpamps
 
-def redundant_cps(deltaps, N = 7):
+def redundant_cps(deltaps, N=7):
     """ 
         input: delta-phases are fringe phases for 'half the vector baselines'
         returns cps, fringephasearray in radians
@@ -525,7 +525,7 @@ def return_CAs(amps, N=7):
     return CAs
 
 
-def q4_phases(deltaps, n=7):
+def q4_phases(deltaps, N=7):
     """
     Calculate phases for each set of 4 holes
 
@@ -542,14 +542,14 @@ def q4_phases(deltaps, n=7):
     quad_phases: 1D float array
         quad phases
     """
-    arr = populate_antisymmphasearray(deltaps, n=n)  # fringe phase array
+    arr = populate_antisymmphasearray(deltaps, N=N)  # fringe phase array
+    nn = 0
+    quad_phases = np.zeros(int(comb(N, 4)))
 
-    quad_phases = np.zeros(int(comb(n, 4)))
-
-    for ii in range(n - 3):
-        for jj in range(n - ii - 3):
-            for kk in range(n - jj - ii - 3):
-                for ll in range(n - jj - ii - kk - 3):
+    for ii in range(N - 3):
+        for jj in range(N - ii - 3):
+            for kk in range(N - jj - ii - 3):
+                for ll in range(N - jj - ii - kk - 3):
                     quad_phases[nn + ll] = (
                         arr[ii, jj + ii + 1]
                         + arr[ll + ii + jj + kk + 3, kk + jj + ii + 2]

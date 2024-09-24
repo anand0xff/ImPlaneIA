@@ -454,9 +454,9 @@ class NRM_Model():
         self.fringeamp, self.fringephase = leastsqnrm.tan2visibilities(self.soln)
         self.fringepistons = utils.fringes2pistons(self.fringephase, len(self.ctrs))
         self.redundant_cps = leastsqnrm.redundant_cps(self.fringephase, N=self.N)
-        self.t3_amplitudes = leastsqnrm.t3_amplitudes(self.fringeamp, n=self.N) # RC 8/24
+        self.t3_amplitudes = leastsqnrm.t3_amplitudes(self.fringeamp, N=self.N) # RC 8/24
         self.redundant_cas = leastsqnrm.return_CAs(self.fringeamp, N=self.N)
-        self.q4_phases = leastsqnrm.q4_phases(self.fringephase, n=self.N) # RC 8/24
+        self.q4_phases = leastsqnrm.q4_phases(self.fringephase, N=self.N) # RC 8/24
 
 
     # LG++ with sim data - don't use this cos you already found center in nrm_core
