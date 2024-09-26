@@ -23,7 +23,7 @@ from copy import deepcopy
 from poppy import matrixDFT
 from scipy.ndimage import median_filter
 
-from jwst.datamodels import dqflags
+from stdatamodels.jwst.datamodels import dqflags
 
 from nrm_analysis.misctools.utils import min_distance_to_edge
 

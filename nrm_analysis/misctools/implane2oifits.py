@@ -397,15 +397,18 @@ def average_observables(nrm, averfunc):
     if averfunc == np.median:
         _, avg_fa, std_fa = sigma_clipped_stats(nrm.fa, axis=0)  # 21. std_fa is just for comparing to covariance
         _, avg_fp, std_fp  = sigma_clipped_stats(nrm.fp, axis=0)  # 21
-        _, avg_sqv, err_sqv = sigma_clipped_stats(nrm.fa**2, axis=0)
+        _, avg_sqv, std_sqv = sigma_clipped_stats(nrm.fa**2, axis=0)
         _, avg_pist, err_pist = sigma_clipped_stats(nrm.pistons, axis=0)
     else:  # mean
         avg_fa, _, std_fa = sigma_clipped_stats(nrm.fa, axis=0)
         avg_fp, _, std_fp = sigma_clipped_stats(nrm.fp, axis=0)
-        avg_sqv, _, err_sqv = sigma_clipped_stats(nrm.fa**2, axis=0)
+        avg_sqv, _, std_sqv = sigma_clipped_stats(nrm.fa**2, axis=0)
         avg_pist, _, err_pist = sigma_clipped_stats(nrm.pistons, axis=0)
     
     err_fa, err_fp = err_from_covmat(covmats_fringes)
+
+    # calculate squared visibility (fringe) amplitude uncertainties correctly
+    err_sqv = 2 * avg_fa * err_fa
 
     # calculate triple and quad quantities from **averaged** fringe amps and phases
     avg_t3amp = leastsqnrm.t3_amplitudes(avg_fa, N=nrm.nh)
@@ -542,7 +545,6 @@ def populate_NRM(nrm_t, method='med'):
               'e_pist': np.rad2deg(e_pist)
               }
 
-    print('debug:',np.rad2deg(visphi))
 
     return dict2class(output)
 
