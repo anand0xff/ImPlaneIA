@@ -130,9 +130,10 @@ def psf(filt, fbp, cw, ew, beta, data_dir,
               oversample = 11, 
               n_image = 81, 
               pixelscale_as=0.0656, 
-              f2f = 0.82,
+              f2f = 0.80,
               saveover = True,
-              savedet = False):
+              savedet = False,
+              chooseholes=None):
     
     arcsec2rad = u.arcsec.to(u.rad)
 
@@ -149,19 +150,24 @@ def psf(filt, fbp, cw, ew, beta, data_dir,
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
 
-    name_seed = 'PSF_%s_%s_x%d_%.2f'%(mask,filt,oversample,f2f)
+    name_seed = 'PSF_%s_%s_x%d'%(mask,filt,oversample)
+    hmnem = ''
+    for hh in chooseholes: hmnem = hmnem+hh
+    print(hmnem)
 
-    psf_image_name = name_seed + '_ref.fits'
+    psf_image_name = name_seed + '_' + hmnem + '.fits'
     psf_image = os.path.join(data_dir,psf_image_name)
     psf_image_without_oversampling = os.path.join(data_dir,psf_image_name.replace('.fits','_det.fits'))
+    print(psf_image_without_oversampling)
 
     if (not os.path.isfile(psf_image_without_oversampling)) | (overwrite): 
         from nrm_analysis.fringefitting.LG_Model import NRM_Model
-        jw = NRM_Model(mask='jwst', holeshape="hex", verbose=True)
+        jw = NRM_Model(mask='jwst', holeshape="hex", verbose=True, chooseholes=chooseholes)
         jw.set_pixelscale(pixelscale_as*arcsec2rad)
         jw.simulate(fov=n_image, 
             bandpass=fbp, 
-            over=oversample)
+            over=oversample,
+            )
         print("simulateG7S6psf: simulation oversampling is", oversample)
         (year, month, day, hour, minute, second, weekday, DOY, DST) =  time.gmtime()
         # optional writing of oversampled image
@@ -185,20 +191,6 @@ def psf(filt, fbp, cw, ew, beta, data_dir,
             header["FT"] = ( "analytical", "hexee * fringes")
             header['NRM_GEOM'] =  'G7S6', 'Beaulieu, PGT, AS, active ctrs'
             header['F2F'] = jw.d, "flat2flat hole size m"
-            header['NRM_X_A1'] = jw.ctrs[0,0], 'X coordinate (m) of NRM sub-aperture 0'          
-            header['NRM_Y_A1'] = jw.ctrs[0,1], 'Y coordinate (m) of NRM sub-aperture 0'         
-            header['NRM_X_A2'] = jw.ctrs[1,0], 'X coordinate (m) of NRM sub-aperture 1'          
-            header['NRM_Y_A2'] = jw.ctrs[1,1], 'Y coordinate (m) of NRM sub-aperture 1'          
-            header['NRM_X_A3'] = jw.ctrs[2,0], 'X coordinate (m) of NRM sub-aperture 2'          
-            header['NRM_Y_A3'] = jw.ctrs[2,1], 'Y coordinate (m) of NRM sub-aperture 2'          
-            header['NRM_X_A4'] = jw.ctrs[3,0], 'X coordinate (m) of NRM sub-aperture 3'          
-            header['NRM_Y_A4'] = jw.ctrs[3,1], 'Y coordinate (m) of NRM sub-aperture 3'          
-            header['NRM_X_A5'] = jw.ctrs[4,0], 'X coordinate (m) of NRM sub-aperture 4'          
-            header['NRM_Y_A5'] = jw.ctrs[4,1], 'Y coordinate (m) of NRM sub-aperture 4'          
-            header['NRM_X_A6'] = jw.ctrs[5,0], 'X coordinate (m) of NRM sub-aperture 5'          
-            header['NRM_Y_A6'] = jw.ctrs[5,1], 'Y coordinate (m) of NRM sub-aperture 5'          
-            header['NRM_X_A7'] = jw.ctrs[6,0], 'X coordinate (m) of NRM sub-aperture 6'          
-            header['NRM_Y_A7'] = jw.ctrs[6,1], 'Y coordinate (m) of NRM sub-aperture 6'   
             header['PSFTOT'] = filt_psftot[filt], "sum of webbpsf sim done at 11x over"
             header['PSFPEAK'] = psf_over_n.max()
             header["SRC"] = ( "simulateG7S6psf.py", "ImplaneIA/notebooks/")
@@ -229,20 +221,6 @@ def psf(filt, fbp, cw, ew, beta, data_dir,
             header["FT"] = ( "analytical", "hexee * fringes")
             header['NRM_GEOM'] =  'G7S6', 'Beaulieu, PGT, AS active ctrs'
             header['F2F'] = jw.d, "flat2flat hole size m"
-            header['NRM_X_A1'] = jw.ctrs[0,0], 'X coordinate (m) of NRM sub-aperture 0'          
-            header['NRM_Y_A1'] = jw.ctrs[0,1], 'Y coordinate (m) of NRM sub-aperture 0'         
-            header['NRM_X_A2'] = jw.ctrs[1,0], 'X coordinate (m) of NRM sub-aperture 1'          
-            header['NRM_Y_A2'] = jw.ctrs[1,1], 'Y coordinate (m) of NRM sub-aperture 1'          
-            header['NRM_X_A3'] = jw.ctrs[2,0], 'X coordinate (m) of NRM sub-aperture 2'          
-            header['NRM_Y_A3'] = jw.ctrs[2,1], 'Y coordinate (m) of NRM sub-aperture 2'          
-            header['NRM_X_A4'] = jw.ctrs[3,0], 'X coordinate (m) of NRM sub-aperture 3'          
-            header['NRM_Y_A4'] = jw.ctrs[3,1], 'Y coordinate (m) of NRM sub-aperture 3'          
-            header['NRM_X_A5'] = jw.ctrs[4,0], 'X coordinate (m) of NRM sub-aperture 4'          
-            header['NRM_Y_A5'] = jw.ctrs[4,1], 'Y coordinate (m) of NRM sub-aperture 4'          
-            header['NRM_X_A6'] = jw.ctrs[5,0], 'X coordinate (m) of NRM sub-aperture 5'          
-            header['NRM_Y_A6'] = jw.ctrs[5,1], 'Y coordinate (m) of NRM sub-aperture 5'          
-            header['NRM_X_A7'] = jw.ctrs[6,0], 'X coordinate (m) of NRM sub-aperture 6'          
-            header['NRM_Y_A7'] = jw.ctrs[6,1], 'Y coordinate (m) of NRM sub-aperture 6'   
             header['PSFTOT'] = psf_det_n.sum()
             header['PSFPEAK'] = psf_det_n.max()
             header['CPF'] = filt_cpf[filt]
@@ -254,18 +232,27 @@ def psf(filt, fbp, cw, ew, beta, data_dir,
 
 if __name__ == "__main__":
 
+    allholes = ('b4','c2','b5','b2','c1','b6','c6')
+    b4,c2,b5,b2,c1,b6,c6 = allholes
+    
+    holesequence = (b6, b2, b4, c6, b5, c1, c2)
+    print(len(holesequence))
+
+
     parser = argparse.ArgumentParser(description="Creates JWST AMI psfs in supported filters")
     parser.add_argument('-o','--over',  type=int, default='3', help='oversampling before binning to detector pixels (>=1)')
-    parser.add_argument("-m", "--monochromatic", help = "monochromatic psf at nominal band centers", action="store_true")
+    parser.add_argument("-m", "--monochromatic", default=True, help = "monochromatic psf at nominal band centers", action="store_true")
     args = parser.parse_args(sys.argv[1:])
 
     print("monochromatic", args.monochromatic)
     print("oversampling", args.over)
-    
     bpd, cwd, ewd, betad = get_webbpsffilters(mono=args.monochromatic)
-    filters = ("F480M", "F430M", "F380M", "F277W")
+    filters = ("F480M", ) # "F430M", "F380M", "F277W")
 
     for ff in filters:
-        psf(ff, bpd[ff], cwd[ff], ewd[ff], betad[ff],  './simulatedpsfs/', n_image=81, saveover=True, oversample=args.over)
-
-    print("monochromatic", args.monochromatic)
+        print(ff)
+        for ihole in range(len(holesequence)):
+            psf(ff, bpd[ff], cwd[ff], ewd[ff], betad[ff],
+                './simulatedpsfs_chooseholes/', n_image=81, 
+                saveover=True, savedet=False, oversample=args.over,
+                chooseholes=holesequence[:ihole+1])

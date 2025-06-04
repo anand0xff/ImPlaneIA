@@ -80,7 +80,7 @@ mas = 1.0e-3 / (60*60*180/np.pi) # in radians
 
 class NRM_Model():
 
-    def __init__(self, mask=None, v3_yang=0.0, holeshape="circ", pixscale=None,
+    def __init__(self, mask='jwst', v3_yang=0.0, holeshape="circ", pixscale=None,
             over = 1, log=_default_log, pixweight=None,
             datapath="",
             phi=None, refdir="",
@@ -93,6 +93,7 @@ class NRM_Model():
         pixscale should be input in radians.
         phi (rad) default changedfrom "perfect" to None (with bkwd compat.)
         """ 
+
 
         if "debug" in kwargs:
             self.debug=kwargs["debug"]
@@ -117,13 +118,14 @@ class NRM_Model():
         self.pixweight = pixweight
 
 
-        if mask is None:
+        print("LG_Model.maskname", self.maskname)
+        if self.maskname is None:
             print("LG_Model.__init__: No mask name specified for model, using jwst_g7s6c")
             mask = mask_definitions.NRM_mask_definitions(maskname="jwst_g7s6c", 
                                     chooseholes=chooseholes, 
                                     holeshape="hex")
         elif isinstance(mask, str):
-            mask = mask_definitions.NRM_mask_definitions(maskname=mask, 
+            mask = mask_definitions.NRM_mask_definitions(maskname=self.maskname, 
                                     chooseholes=chooseholes, 
                                     holeshape="hex")
         self.ctrs = mask.ctrs
